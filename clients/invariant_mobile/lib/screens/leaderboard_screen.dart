@@ -11,26 +11,62 @@ class LeaderboardScreen extends StatefulWidget {
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
+class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _leaderboardData = [];
   bool _isLoading = true;
   bool _hasError = false;
+  
+  // Animation for the refresh button
+  late AnimationController _spinController;
 
   @override
   void initState() {
     super.initState();
+    _spinController = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 1)
+    );
     _loadData();
+  }
+  
+  @override
+  void dispose() {
+    _spinController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
+    // Start spinning
+    _spinController.repeat();
     HapticFeedback.lightImpact();
-    final data = await InvariantClient().fetchLeaderboard();
-    if (mounted) {
-      setState(() {
-        _leaderboardData = data;
-        _isLoading = false;
-        _hasError = data.isEmpty; // Assume empty is error/offline for now
-      });
+    
+    setState(() => _isLoading = true);
+    
+    // Artificial delay to ensure user feels the weight of the network
+    // and to let the animation play briefly
+    final start = DateTime.now();
+    
+    try {
+      final data = await InvariantClient().fetchLeaderboard();
+      
+      // Ensure at least 800ms spin
+      final duration = DateTime.now().difference(start);
+      if (duration.inMilliseconds < 800) {
+        await Future.delayed(Duration(milliseconds: 800 - duration.inMilliseconds));
+      }
+
+      if (mounted) {
+        setState(() {
+          _leaderboardData = data;
+          _isLoading = false;
+          _hasError = data.isEmpty;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+    } finally {
+      _spinController.stop();
+      _spinController.reset();
     }
   }
 
@@ -43,7 +79,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         (e) => e['id'] == widget.myIdentityId,
       );
     } catch (e) {
-      // Not in top 50, create a placeholder
       myEntry = null;
     }
 
@@ -57,7 +92,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           SafeArea(
             child: Column(
               children: [
-                // 2. Header
+                // 2. Header (Updated with Refresh)
                 _buildHeader(),
 
                 // 3. List or Loading
@@ -108,7 +143,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
           TextButton(
             onPressed: () {
-              setState(() => _isLoading = true);
               _loadData();
             },
             child: const Text("RETRY UPLINK", style: TextStyle(color: Color(0xFF00FFC2))),
@@ -148,16 +182,40 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ],
           ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white24),
-                borderRadius: BorderRadius.circular(4),
+          
+          Row(
+            children: [
+              // 🔄 REFRESH BUTTON
+              IconButton(
+                onPressed: _isLoading ? null : _loadData,
+                icon: RotationTransition(
+                  turns: _spinController,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFF00FFC2).withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(4),
+                      color: const Color(0xFF00FFC2).withValues(alpha: 0.1),
+                    ),
+                    child: const Icon(Icons.refresh, color: Color(0xFF00FFC2), size: 20),
+                  ),
+                ),
               ),
-              child: const Icon(Icons.close, color: Colors.white, size: 20),
-            ),
+              const SizedBox(width: 8),
+              
+              // CLOSE BUTTON
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white24),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              )
+            ],
           )
         ],
       ),
@@ -264,7 +322,7 @@ class _AnimatedLeaderboardItemState extends State<_AnimatedLeaderboardItem> with
     );
 
     // Stagger effect: items appear one by one
-    final delay = widget.index * 50; // Fast 50ms cascade
+    final delay = widget.index * 50; 
     Future.delayed(Duration(milliseconds: delay), () {
       if (mounted) _controller.forward();
     });

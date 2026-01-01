@@ -4,54 +4,72 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:workmanager/workmanager.dart';
 import '../api_client.dart';
 import '../utils/time_helper.dart';
+import '../utils/genesis_logic.dart'; // IMPORT THIS
+import 'notification_manager.dart'; 
 
 const String kHeartbeatTask = "invariant_heartbeat";
 
-// This entry point runs on a separate isolate (Headless Flutter Engine)
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // 1. Initialize dependencies in the background isolate
+    final notifs = NotificationManager();
+    await notifs.initialize();
+
     const storage = FlutterSecureStorage();
     final client = InvariantClient();
-    
-    // This works because we moved the logic to the 'native_keystore' plugin
     const platform = MethodChannel('com.invariant.protocol/keystore');
 
     try {
-      debugPrint("⛏️ MINER: Waking up in BACKGROUND...");
+      debugPrint("⛏️ MINER: Waking up...");
       
       final identityId = await storage.read(key: 'identity_id');
-      if (identityId == null) {
-        debugPrint("⛏️ MINER: No Identity found. Sleeping.");
-        return Future.value(false); // Task failed (no retry needed usually if no ID)
-      }
+      if (identityId == null) return Future.value(false);
 
-      // 2. Generate Timestamp using Canonical Helper
       final timestamp = TimeHelper.canonicalUtcTimestamp();
       final payloadToSign = "$identityId|$timestamp";
 
-      // 3. Call the Native Plugin to sign via TEE
       final signature = await platform.invokeMethod('signHeartbeat', {
         'payload': payloadToSign,
       });
 
-      // 4. Send to Server
       final sigBytes = (signature as List<Object?>).map((e) => e as int).toList();
       final success = await client.heartbeat(identityId, sigBytes, timestamp);
       
       if (success) {
-        debugPrint("✅ MINER: Heartbeat Accepted ($timestamp).");
+        debugPrint("✅ MINER: Success.");
+
+        // 1. REAPER: Reset the Dead Man's Switch to +5 hours
+        await notifs.scheduleReaperWarning();
+
+        // 2. DAILY BRIEF: Check if we completed a full "Day" (6 cycles)
+        try {
+          final status = await client.getIdentityStatus(identityId);
+          if (status != null) {
+            final streak = int.tryParse((status['streak'] ?? '0').toString()) ?? 0;
+            
+            // LOGIC: Only show brief every 6 cycles (approx 24h)
+            // or if it's the very first cycle (to confirm it works)
+            if (streak > 0 && streak % GenesisLogic.cyclesPerDay == 0) {
+              
+              // We need total network nodes for the brief (Optional, defaulting to '20+' if not in response)
+              // Assuming API returns it or we fake it for the brief for now
+              int totalNodes = 20; // Default placeholder for the brief
+              
+              await notifs.showMissionBrief(streak, totalNodes);
+            }
+          }
+        } catch (e) {
+          debugPrint("Miner Status Check Failed: $e");
+        }
+
       } else {
-        debugPrint("❌ MINER: Server Rejected.");
+        debugPrint("❌ MINER: Failed.");
       }
 
-      // Return true if successful, false to retry
       return Future.value(success);
 
     } catch (e) {
       debugPrint("❌ MINER ERROR: $e");
-      // Return false to let WorkManager retry later if it was a glitch
       return Future.value(false);
     }
   });
@@ -62,20 +80,18 @@ class MinerService {
     Workmanager().initialize(
       callbackDispatcher,
       // ignore: deprecated_member_use
-      isInDebugMode: false, // 🚀 PRODUCTION MODE: No generic notifications
+      isInDebugMode: false, 
     );
   }
 
   static void startMining() {
-    // Android WorkManager guarantees execution, but timing is inexact to save battery.
-    // 4 hours is a safe window for the 6-hour streak logic.
     Workmanager().registerPeriodicTask(
       kHeartbeatTask, 
       "mining_task",
       frequency: const Duration(hours: 4), 
       constraints: Constraints(
         networkType: NetworkType.connected, 
-        requiresBatteryNotLow: true, // Be polite to the user's battery
+        requiresBatteryNotLow: true,
       ),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       backoffPolicy: BackoffPolicy.linear,

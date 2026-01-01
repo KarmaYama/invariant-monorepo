@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart'; // Add google_fonts to pubspec.yaml
+import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'auth_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  // Added "SYSTEM OVERRIDE" as page 3 (index 3)
   final List<Map<String, String>> _pages = [
     {
       "title": "PROOF OF\nDEVICE",
@@ -30,21 +32,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       "body": "You are joining the Testnet.\n\nMaintain 14 days of uptime to permanently etch your device into the protocol's Genesis Block.",
       "icon": "diamond"
     },
+    {
+      "title": "SYSTEM\nOVERRIDE",
+      "body": "Android kills background apps to save battery.\n\nTo survive the 14-day test, you must grant Unrestricted Battery and Notification access.",
+      "icon": "warning"
+    },
   ];
 
   void _onPageChanged(int index) {
-    HapticFeedback.selectionClick(); // Subtle tick feel
+    HapticFeedback.selectionClick();
     setState(() => _currentPage = index);
   }
 
-  void _nextPage() {
+  Future<void> _requestPermissions() async {
+    // 1. Notifications (for Reaper Warnings)
+    await Permission.notification.request();
+
+    // 2. Battery Optimization (The Killer)
+    // We open the system dialog. The user must click "Allow".
+    var status = await Permission.ignoreBatteryOptimizations.status;
+    if (!status.isGranted) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+  }
+
+  void _nextPage() async {
     if (_currentPage < _pages.length - 1) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 600), 
-        curve: Curves.easeOutQuart // "Physical" easing
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeOutQuart
       );
     } else {
+      // Perform final permission check before routing
+      await _requestPermissions();
+      
       HapticFeedback.mediumImpact();
+      if (!mounted) return;
+      
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 800),
@@ -62,7 +86,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Background: Subtle Gradient Drift
+          // Background Gradient
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -70,7 +94,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   center: Alignment.topLeft,
                   radius: 1.5,
                   colors: [
-                    const Color(0xFF00FFC2).withValues(alpha: 0.05), // Faint cyan glow
+                    const Color(0xFF00FFC2).withValues(alpha: 0.05),
                     Colors.black,
                   ],
                 ),
@@ -87,10 +111,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onPageChanged: _onPageChanged,
                     itemCount: _pages.length,
                     itemBuilder: (context, index) {
-                      // Animated Page Content
                       return _AnimatedPageContent(
                         isActive: _currentPage == index,
                         data: _pages[index],
+                        // Show permission buttons only on the last page
+                        showActions: index == 3, 
                       );
                     },
                   ),
@@ -121,18 +146,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                       
-                      // Button
+                      // Action Button
                       ElevatedButton(
                         onPressed: _nextPage,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
+                          backgroundColor: _currentPage == 3 
+                              ? const Color(0xFF00FFC2) // Highlight on last step
+                              : Colors.white,
                           foregroundColor: Colors.black,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
                         ),
                         child: Text(
-                          _currentPage == _pages.length - 1 ? "INITIALIZE" : "NEXT",
+                          _currentPage == _pages.length - 1 ? "GRANT & START" : "NEXT",
                           style: GoogleFonts.spaceGrotesk(
                             fontWeight: FontWeight.w700, 
                             letterSpacing: 1.0
@@ -151,19 +178,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// Staggered Animation Widget
 class _AnimatedPageContent extends StatelessWidget {
   final bool isActive;
   final Map<String, String> data;
+  final bool showActions;
 
-  const _AnimatedPageContent({required this.isActive, required this.data});
+  const _AnimatedPageContent({
+    required this.isActive, 
+    required this.data, 
+    this.showActions = false
+  });
 
   @override
   Widget build(BuildContext context) {
     IconData icon;
+    Color iconColor = const Color(0xFF00FFC2);
+    
     switch(data['icon']) {
       case 'shield': icon = Icons.shield_outlined; break;
       case 'bolt': icon = Icons.bolt; break;
+      case 'warning': 
+        icon = Icons.power_off; 
+        iconColor = Colors.orangeAccent; // Visual danger
+        break;
       default: icon = Icons.diamond_outlined; break;
     }
 
@@ -173,7 +210,7 @@ class _AnimatedPageContent extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Icon (Fastest)
+          // Icon
           AnimatedOpacity(
             duration: const Duration(milliseconds: 400),
             opacity: isActive ? 1.0 : 0.0,
@@ -182,21 +219,21 @@ class _AnimatedPageContent extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF00FFC2).withValues(alpha: 0.3)),
+                border: Border.all(color: iconColor.withValues(alpha: 0.3)),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFF00FFC2).withValues(alpha: 0.1), blurRadius: 20)
+                  BoxShadow(color: iconColor.withValues(alpha: 0.1), blurRadius: 20)
                 ]
               ),
-              child: Icon(icon, size: 48, color: const Color(0xFF00FFC2)),
+              child: Icon(icon, size: 48, color: iconColor),
             ),
           ),
           const SizedBox(height: 48),
           
-          // 2. Title (Medium Delay)
+          // Title
           AnimatedOpacity(
             duration: const Duration(milliseconds: 500),
             opacity: isActive ? 1.0 : 0.0,
-            curve: const Interval(0.2, 1.0, curve: Curves.easeOut), // Staggered
+            curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
             child: Transform.translate(
               offset: isActive ? Offset.zero : const Offset(0, 20),
               child: Text(
@@ -213,17 +250,17 @@ class _AnimatedPageContent extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           
-          // 3. Body (Slowest)
+          // Body
           AnimatedOpacity(
             duration: const Duration(milliseconds: 600),
             opacity: isActive ? 1.0 : 0.0,
-            curve: const Interval(0.4, 1.0, curve: Curves.easeOut), // More Staggered
+            curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
             child: Transform.translate(
               offset: isActive ? Offset.zero : const Offset(0, 20),
               child: Text(
                 data['body']!,
                 style: GoogleFonts.inter(
-                  color: Colors.white70, // Increased contrast (was white60/54)
+                  color: Colors.white70,
                   fontSize: 16,
                   height: 1.5,
                   fontWeight: FontWeight.w400,

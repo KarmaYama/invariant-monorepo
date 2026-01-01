@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../api_client.dart';
 import '../utils/time_helper.dart';
+import '../utils/genesis_logic.dart'; // IMPORT THIS
 import '../widgets/genesis_ring.dart';
 import '../theme_manager.dart';
 import 'leaderboard_screen.dart';
@@ -36,6 +37,7 @@ class _IdentityCardState extends State<IdentityCard> {
     _checkSystemHealth();
     _fetchData();
     _startCountdown();
+    // Refresh every 30s to keep sync
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _fetchData());
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkUsernameStatus());
   }
@@ -128,9 +130,11 @@ class _IdentityCardState extends State<IdentityCard> {
     final isDark = theme.isDark;
     
     final int streak = int.tryParse((_identityData?['streak'] ?? '0').toString()) ?? 0;
-    final String tier = (_identityData?['tier'] ?? '---').toString().toUpperCase();
     final bool isGenesis = (_identityData?['is_genesis_eligible'] ?? false) as bool;
     final String? username = _identityData?['username'];
+
+    // 1. USE GENESIS LOGIC FOR TITLES
+    final String tierTitle = GenesisLogic.getTitle(streak); 
 
     final subTextColor = isDark ? Colors.white38 : Colors.black38;
     final cardBorderColor = isDark ? Colors.white12 : Colors.black12;
@@ -147,6 +151,7 @@ class _IdentityCardState extends State<IdentityCard> {
                 children: [
                   const SizedBox(height: 16),
                   
+                  // TOP BAR
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -154,7 +159,8 @@ class _IdentityCardState extends State<IdentityCard> {
                         children: [
                           _buildStatusBadge(isGenesis ? "GENESIS" : "NODE", isGenesis ? Colors.amber : const Color(0xFF00FFC2)),
                           const SizedBox(width: 8),
-                          _buildStatusBadge(tier, subTextColor),
+                          // 2. DISPLAY DYNAMIC TITLE
+                          _buildStatusBadge(tierTitle, subTextColor),
                         ],
                       ),
                       IconButton(
@@ -181,15 +187,19 @@ class _IdentityCardState extends State<IdentityCard> {
                   ],
 
                   const Spacer(),
-                  GenesisRing(streak: streak, isSignaling: _isSignaling),
+                  // 3. PASS 84 AS TOTAL CYCLES
+                  GenesisRing(
+                    streak: streak, 
+                    totalCycles: GenesisLogic.totalCycles, // 84
+                    isSignaling: _isSignaling
+                  ),
                   const Spacer(),
 
-                  // Display system health warning using the _isBatteryOptimized field
                   if (_isBatteryOptimized)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 20),
                       child: Text(
-                        "⚠️ SYSTEM RESTRICTED: CHECK BATTERY SETTINGS",
+                        "⚠️ SYSTEM RESTRICTED: DISABLE BATTERY OPT.",
                         style: GoogleFonts.inter(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -235,6 +245,7 @@ class _IdentityCardState extends State<IdentityCard> {
     );
   }
 
+  // ... (Keep existing _buildTelemetryButton, _buildStatusBadge, _buildStat, _UsernameInputForm, _GridPainter)
   Widget _buildTelemetryButton(bool isDark, Color borderColor) {
     return GestureDetector(
       onTap: () {
@@ -291,7 +302,6 @@ class _IdentityCardState extends State<IdentityCard> {
   }
 }
 
-// Missing Widget Definition
 class _UsernameInputForm extends StatefulWidget {
   final String identityId;
   final VoidCallback onSuccess;

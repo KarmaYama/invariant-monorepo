@@ -127,6 +127,13 @@ class InvariantClient {
       ).timeout(kRequestTimeout);
 
       if (response.statusCode == 200) return true;
+
+      // [FIX] If we are Rate Limited (429), consider it a "Success" 
+      // This tells WorkManager: "Task done, stop retrying, I'll sleep for 4 hours."
+      if (response.statusCode == 429) {
+        debugPrint("⏳ Rate Limit Hit: Backing off.");
+        return true; 
+      }
       
       debugPrint("Server Rejected Heartbeat: ${response.statusCode} ${response.body}");
       return false;
