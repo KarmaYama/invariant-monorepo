@@ -1,0 +1,11 @@
+[package]
+name = "invariant_shared"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license = "MIT" # Shared models are Open Source to encourage integration
+
+[dependencies]
+serde = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

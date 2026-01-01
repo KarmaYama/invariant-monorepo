@@ -1,0 +1,29 @@
+[package]
+name = "invariant_server"
+version.workspace = true
+edition.workspace = true
+license = "BSL-1.1"
+
+[dependencies]
+# Internal
+invariant_engine = { path = "../invariant_engine" }
+invariant_shared = { path = "../invariant_shared" }
+
+# Workspace
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+tower-http = { workspace = true }
+sqlx = { workspace = true }
+dotenvy = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+redis = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+once_cell = { workspace = true }
