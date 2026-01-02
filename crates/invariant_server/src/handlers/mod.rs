@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/mod.rs
 /*
  * Copyright (c) 2025 Invariant Protocol
  * Use of this software is governed by the Business Source License.
@@ -8,6 +9,8 @@ use crate::state::SharedState;
 use uuid::Uuid;
 use invariant_engine::IdentityStorage;
 use chrono::{Duration};
+// [FIX] Import CORS components
+use tower_http::cors::{CorsLayer, Any}; 
 
 pub mod genesis;
 pub mod heartbeat;
@@ -46,6 +49,13 @@ async fn check_identity_handler(
 }
 
 pub fn app_router(state: SharedState) -> Router {
+    // [FIX] Define CORS Layer
+    // This allows your Next.js frontend (running on Vercel/Localhost) to talk to this AWS backend.
+    let cors = CorsLayer::new()
+        .allow_origin(Any)     // Allow requests from anywhere (Public API)
+        .allow_methods(Any)    // Allow GET, POST, OPTIONS, etc.
+        .allow_headers(Any);   // Allow any headers (Content-Type, etc.)
+
     Router::new()
         .route("/health", get(|| async { "Invariant Node Online" }))
         .route("/genesis", post(genesis::genesis_handler))
@@ -54,5 +64,6 @@ pub fn app_router(state: SharedState) -> Router {
         .route("/identity/claim_username", post(identity::claim_username_handler))
         .route("/leaderboard", get(identity::get_leaderboard_handler))
         .route("/genesis/challenge", get(genesis::get_challenge_handler))
+        .layer(cors) // [FIX] Apply the layer here (Order matters: Layer wraps the routes)
         .layer(axum::Extension(state))
 }
