@@ -9,7 +9,6 @@ use crate::state::SharedState;
 use uuid::Uuid;
 use invariant_engine::IdentityStorage;
 use chrono::{Duration};
-// [FIX] Import CORS components
 use tower_http::cors::{CorsLayer, Any}; 
 
 pub mod genesis;
@@ -49,21 +48,23 @@ async fn check_identity_handler(
 }
 
 pub fn app_router(state: SharedState) -> Router {
-    // [FIX] Define CORS Layer
-    // This allows your Next.js frontend (running on Vercel/Localhost) to talk to this AWS backend.
+    // CORS: Allow everything for the public API
     let cors = CorsLayer::new()
-        .allow_origin(Any)     // Allow requests from anywhere (Public API)
-        .allow_methods(Any)    // Allow GET, POST, OPTIONS, etc.
-        .allow_headers(Any);   // Allow any headers (Content-Type, etc.)
+        .allow_origin(Any)     
+        .allow_methods(Any)    
+        .allow_headers(Any);   
 
     Router::new()
         .route("/health", get(|| async { "Invariant Node Online" }))
+        // STATEFUL (For App)
         .route("/genesis", post(genesis::genesis_handler))
+        // STATELESS (For SDK/B2B)
+        .route("/verify", post(genesis::verify_stateless_handler)) // <--- ADDED THIS
         .route("/heartbeat", post(heartbeat::heartbeat_handler))
         .route("/identity/:id", get(check_identity_handler))
         .route("/identity/claim_username", post(identity::claim_username_handler))
         .route("/leaderboard", get(identity::get_leaderboard_handler))
         .route("/genesis/challenge", get(genesis::get_challenge_handler))
-        .layer(cors) // [FIX] Apply the layer here (Order matters: Layer wraps the routes)
+        .layer(cors)
         .layer(axum::Extension(state))
 }

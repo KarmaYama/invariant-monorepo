@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/genesis.rs
 /*
  * Copyright (c) 2025 Invariant Protocol
  * Use of this software is governed by the Business Source License.
@@ -27,7 +28,6 @@ static RATE_LIMITER: Lazy<Mutex<HashMap<String, (u32, Instant)>>> = Lazy::new(||
 fn check_rate_limit(ip: String) -> bool {
     let mut store = RATE_LIMITER.lock().unwrap();
     
-    // FIX 1: Clone 'ip' here so we don't give away ownership yet
     let (count, last_reset) = store.entry(ip.clone()).or_insert((0, Instant::now()));
 
     if last_reset.elapsed() > Duration::from_secs(3600) {
@@ -35,8 +35,7 @@ fn check_rate_limit(ip: String) -> bool {
         *last_reset = Instant::now();
     }
 
-    if *count >= 5 {
-        // FIX 1 (Result): Now we can still use 'ip' for logging because we only gave a clone to the map
+    if *count >= 100 { // Increased limit for B2B usage/testing
         warn!("Rate Limit Exceeded for IP: {}", ip);
         return false;
     }
@@ -74,7 +73,6 @@ pub async fn get_challenge_handler(
         rng.fill(&mut nonce_bytes);
         let hex_val = hex::encode(nonce_bytes);
         
-        // FIX 2: Clone 'hex_val' for the first usage so the second usage (format!) can borrow the original
         (hex_val.clone(), format!("nonce:{}", hex_val))
     };
 
@@ -86,6 +84,7 @@ pub async fn get_challenge_handler(
     }
 }
 
+/// STATEFUL GENESIS (For the Mobile App) - Mints ID to DB
 #[instrument(skip(state, payload))]
 pub async fn genesis_handler(
     Extension(state): Extension<SharedState>,
@@ -129,5 +128,61 @@ pub async fn genesis_handler(
             error!("❌ Genesis Rejected: {}", e);
             (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": format!("Attestation Failed: {}", e) })))
         },
+    }
+}
+
+/// STATELESS VERIFICATION (For the SDK/Shadow Filter) - NO DB WRITE
+#[instrument(skip(state, payload))]
+pub async fn verify_stateless_handler(
+    Extension(state): Extension<SharedState>,
+    Json(payload): Json<GenesisRequest>,
+) -> impl IntoResponse {
+    // 1. Redis Connection
+    let mut conn = match state.redis.get_multiplexed_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Infrastructure Error" }))),
+    };
+
+    // 2. Check Nonce (Anti-Replay)
+    // We strictly enforce nonce freshness even for stateless checks to prevent
+    // attackers from replaying a captured valid attestation from a legitimate device.
+    let nonce_hex = hex::encode(&payload.nonce);
+    let redis_key = format!("nonce:{}", nonce_hex);
+
+    let val: Option<String> = conn.get_del(&redis_key).await.unwrap_or(None);
+    if val.is_none() {
+        // 
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ 
+            "verified": false,
+            "error": "Invalid or Expired Challenge" 
+        })));
+    }
+
+    // 3. PURE CRYPTO CHECK (Engine without Storage)
+    match invariant_engine::validate_attestation_chain(
+        &payload.attestation_chain,
+        &payload.public_key,
+        Some(&payload.nonce)
+    ) {
+        Ok(metadata) => {
+            info!("🔍 Stateless Verification: {} - {}", metadata.trust_tier, metadata.product.as_deref().unwrap_or("Unknown"));
+            
+            // Return success without minting an ID
+            (StatusCode::OK, Json(serde_json::json!({
+                "verified": true,
+                "tier": metadata.trust_tier,
+                "device_model": metadata.device,
+                "risk_score": 0.0 // 0.0 = Pure Hardware Trust
+            })))
+        },
+        Err(e) => {
+            warn!("⚠️ Stateless Verification Failed: {}", e);
+            (StatusCode::OK, Json(serde_json::json!({
+                "verified": false,
+                "tier": "REJECTED",
+                "error": e.to_string(),
+                "risk_score": 100.0 // 100.0 = High Risk / Emulator
+            })))
+        }
     }
 }

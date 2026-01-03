@@ -68,10 +68,22 @@ export default function Landing() {
                 Invariant filters 99% of automated traffic by verifying the <span className="text-white font-normal">Trusted Execution Environment (TEE)</span> in user devices.
               </p>
               
-              <a href="/whitepaper" className="group flex items-center space-x-4 border-b border-white/30 pb-2 hover:border-[#00FFC2] transition-colors">
-                <span className="font-mono text-sm tracking-widest">VIEW ARCHITECTURE</span>
-                <ChevronRight className="text-[#00FFC2] group-hover:translate-x-1 transition-transform" size={16} />
-              </a>
+              {/* --- ACTION LINKS --- */}
+              <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
+                
+                {/* 1. PRIMARY CTA: SDK DOCS */}
+                <a href="/docs" className="group flex items-center space-x-3 border-b border-[#00FFC2] pb-2 hover:opacity-80 transition-opacity">
+                  <Terminal size={18} className="text-[#00FFC2]" />
+                  <span className="font-mono text-sm tracking-widest text-[#00FFC2] font-bold">INTEGRATE SDK</span>
+                </a>
+
+                {/* 2. SECONDARY CTA: WHITEPAPER */}
+                <a href="/whitepaper" className="group flex items-center space-x-2 border-b border-white/30 pb-2 hover:border-white transition-colors">
+                  <span className="font-mono text-sm tracking-widest text-white/60 group-hover:text-white transition-colors">ARCHITECTURE</span>
+                  <ChevronRight className="text-white/60 group-hover:text-white group-hover:translate-x-1 transition-transform" size={16} />
+                </a>
+
+              </div>
             </div>
           </motion.div>
 
@@ -103,7 +115,7 @@ export default function Landing() {
             />
           </div>
 
-          {/* PROBLEM / SOLUTION (Re-written for B2B) */}
+          {/* PROBLEM / SOLUTION */}
           <div className="grid md:grid-cols-2 gap-24 mb-32">
             <div>
               <h2 className="text-4xl font-serif mb-6">The Zero-Cost Attack.</h2>
@@ -123,13 +135,13 @@ export default function Landing() {
                 To forge an Invariant identity, an attacker must purchase a physical device ($40+) and maintain power.
                 <span className="text-white block mt-4">We turn spam from a software problem into a financial problem.</span>
               </p>
-              <a href="/inv" className="text-[#00FFC2] font-mono text-sm border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1">
-                HOW WE VALIDATE
+              <a href="/docs" className="text-[#00FFC2] font-mono text-sm border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1">
+                READ INTEGRATION GUIDE
               </a>
             </div>
           </div>
 
-          {/* NEW SECTION: HOW IT WORKS (Technical Depth) */}
+          {/* HOW IT WORKS */}
           <div className="border-t border-white/10 pt-24 mb-32">
             <h2 className="text-sm font-mono text-[#00FFC2] mb-12 tracking-widest uppercase">The Verification Standard</h2>
             <div className="grid md:grid-cols-3 gap-12">

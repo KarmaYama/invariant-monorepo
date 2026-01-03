@@ -1,4 +1,4 @@
-// lib/src/api_client.dart
+// invariant_sdk/lib/src/api_client.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -25,17 +25,18 @@ class ApiClient {
     }
   }
 
+  /// Verifies the device hardware using the STATELESS endpoint.
+  /// This checks the crypto but does NOT mint a new identity in the database.
   Future<Map<String, dynamic>?> verify(List<int> pk, List<List<int>> chain, String nonce) async {
     try {
-      // Convert hex string nonce back to bytes if needed by your specific backend logic, 
-      // but here we just pass it through as the backend expects.
+      // Convert hex string nonce back to bytes
       List<int> nonceBytes = [];
       for (int i = 0; i < nonce.length; i += 2) {
         nonceBytes.add(int.parse(nonce.substring(i, i + 2), radix: 16));
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/genesis'), // Reusing the genesis endpoint for verification
+        Uri.parse('$baseUrl/verify'), // <--- POINTING TO STATELESS ENDPOINT
         headers: {
           'Content-Type': 'application/json',
           'X-Invariant-Key': apiKey
@@ -47,7 +48,9 @@ class ApiClient {
         }),
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      // Status 200 = Verified (Stateless)
+      // Status 201 = Created (Stateful/Genesis) - We expect 200 here now.
+      if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
       return null;
