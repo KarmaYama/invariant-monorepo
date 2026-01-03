@@ -168,17 +168,23 @@ export default function Docs() {
             <p className="mb-4">
               Initialize the SDK once at the root of your application, typically in `main.dart` or your dependency injection setup.
             </p>
+            
+            <Callout type="info">
+              <strong>Testnet Access:</strong> During the Public Beta, API Key validation is permissive. 
+              Use <code className="bg-white/10 px-1 rounded text-xs">sk_test_demo</code>. 
+              The SDK defaults to the Invariant Testnet Node.
+            </Callout>
+
             <CodeBlock 
               label="main.dart" 
               lang="dart" 
               code={`import 'package:invariant_sdk/invariant_sdk.dart';
 
 void main() {
-  // Initialize with your Project API Key
+  // Initialize with the Testnet Key
   Invariant.initialize(
-    apiKey: "sk_live_51M...", 
-    // Optional: Override base URL for enterprise on-premise deployments
-    // baseUrl: "https://invariant.internal.bank.com"
+    apiKey: "sk_test_demo", 
+    // Default: http://16.171.151.222:3000 (Invariant Testnet)
   );
   
   runApp(MyApp());
