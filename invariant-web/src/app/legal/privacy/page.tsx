@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Lock, FileX, Server } from "lucide-react";
 
 export default function Privacy() {
   return (
@@ -9,51 +9,112 @@ export default function Privacy() {
       <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center">
         <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
           <ArrowLeft size={18} />
-          <span className="text-sm font-mono">RETURN</span>
+          <span className="text-sm font-mono tracking-widest">RETURN TO NETWORK</span>
         </Link>
       </nav>
 
       <main className="max-w-3xl mx-auto pt-32 pb-24 px-6">
-        <h1 className="text-4xl font-serif mb-2">Data Minimization Policy</h1>
-        <p className="text-white/40 font-mono text-xs mb-12">LAST UPDATED: GENESIS EPOCH (2025)</p>
+        <div className="mb-12 border-b border-white/10 pb-8">
+          <h1 className="text-4xl font-serif mb-4">Privacy Architecture</h1>
+          <p className="text-white/60 font-light text-lg">
+            Invariant is designed as a <span className="text-white">Zero-Knowledge Infrastructure</span>. 
+            We verify the device, not the user.
+          </p>
+        </div>
 
-        <div className="space-y-12 prose prose-invert">
+        <div className="space-y-16">
+          
+          {/* SECTION 1: PHILOSOPHY */}
           <section>
-            <h2 className="text-2xl font-serif text-white mb-4">1. The Anti-Data Thesis</h2>
-            <p className="text-white/70 font-light">
-              Invariant is built on a simple premise: <strong>Data is a liability, not an asset.</strong> We do not want to know who you are. We mathematically cannot know who you are.
+            <div className="flex items-center gap-3 mb-4">
+              <ShieldCheck className="text-[#00FFC2]" size={24} />
+              <h2 className="text-2xl font-serif text-white">1. Structural Privacy</h2>
+            </div>
+            <p className="text-white/70 font-light leading-relaxed">
+              We do not rely on "policies" to protect user data; we rely on <strong>cryptographic constraints</strong>. 
+              Our architecture is decoupled: the Attestation Engine verifies hardware integrity without ever requesting access to user identity layers (PII).
             </p>
           </section>
 
+          {/* SECTION 2: DATA COLLECTION */}
           <section>
-            <h2 className="text-2xl font-serif text-white mb-4">2. What We Collect (The Signal)</h2>
-            <ul className="list-disc pl-4 space-y-2 text-white/70 font-light">
-              <li><strong>Attestation Chains:</strong> The X.509 certificate chain provided by your device's Secure Element (StrongBox/TEE). This proves the device model and boot state.</li>
-              <li><strong>Public Keys:</strong> The P-256 public key generated inside your hardware. This allows the network to verify your signatures.</li>
-              <li><strong>Heartbeats:</strong> Cryptographic proofs that your device was online at a specific timestamp.</li>
-            </ul>
+            <div className="flex items-center gap-3 mb-4">
+              <Server className="text-[#00FFC2]" size={24} />
+              <h2 className="text-2xl font-serif text-white">2. Data Ingress (The Signal)</h2>
+            </div>
+            <p className="text-white/70 font-light mb-6">
+              The Protocol processes strictly non-identifiable metadata required to validate the Trusted Execution Environment (TEE):
+            </p>
+            <div className="grid gap-4">
+              <DataPoint 
+                title="X.509 Attestation Chain"
+                desc="The certificate chain provided by the Android Keystore to verify the hardware root of trust."
+              />
+              <DataPoint 
+                title="Ephemeral Public Keys"
+                desc="A P-256 public key generated inside the Secure Element. This key is mathematically unrelated to the user's identity."
+              />
+              <DataPoint 
+                title="Cryptographic Heartbeats"
+                desc="Signed timestamps proving device uptime. These contain no location or behavioral data."
+              />
+            </div>
           </section>
 
+          {/* SECTION 3: EXCLUSIONS */}
           <section>
-            <h2 className="text-2xl font-serif text-white mb-4">3. What We Do Not Collect (The Noise)</h2>
-            <div className="bg-red-500/10 border border-red-500/30 p-6 rounded-lg">
-              <ul className="list-disc pl-4 space-y-2 text-red-200/80 font-light">
-                <li><span className="font-bold text-red-400">NO</span> Biometrics (FaceID/Fingerprint data stays in your Secure Enclave).</li>
-                <li><span className="font-bold text-red-400">NO</span> GPS Location History.</li>
-                <li><span className="font-bold text-red-400">NO</span> Real Names or Government IDs.</li>
-                <li><span className="font-bold text-red-400">NO</span> Phone Numbers or SIM data.</li>
+            <div className="flex items-center gap-3 mb-4">
+              <FileX className="text-red-400" size={24} />
+              <h2 className="text-2xl font-serif text-white">3. Data Exclusions</h2>
+            </div>
+            <div className="bg-white/5 border border-white/10 p-6 rounded-lg">
+              <p className="text-white/70 font-light mb-4">
+                The Invariant SDK operates sandbox-isolated and does not request the following permissions:
+              </p>
+              <ul className="grid md:grid-cols-2 gap-y-3 gap-x-8">
+                <ExclusionItem label="Biometric Data (FaceID/Fingerprint)" />
+                <ExclusionItem label="GPS / Geolocation History" />
+                <ExclusionItem label="Phone Numbers / SMS Logs" />
+                <ExclusionItem label="Contact Lists / Social Graph" />
+                <ExclusionItem label="Advertising ID (GAID/IDFA)" />
+                <ExclusionItem label="App Usage History" />
               </ul>
             </div>
           </section>
 
+          {/* SECTION 4: HASHING */}
           <section>
-            <h2 className="text-2xl font-serif text-white mb-4">4. Hardware Hashing</h2>
-            <p className="text-white/70 font-light">
-              To prevent device fingerprinting, raw hardware identifiers (like Serial Numbers) are salted and hashed using SHA-256 before storage. The raw identifiers are discarded immediately after the initial verification handshake.
+            <div className="flex items-center gap-3 mb-4">
+              <Lock className="text-[#00FFC2]" size={24} />
+              <h2 className="text-2xl font-serif text-white">4. Identifier Hashing</h2>
+            </div>
+            <p className="text-white/70 font-light leading-relaxed">
+              To prevent device fingerprinting across different applications, any hardware identifiers are strictly <strong>Salted and Hashed (SHA-256)</strong> before persistence. 
+              <br/><br/>
+              Raw hardware serial numbers are processed in-memory during the handshake and discarded immediately. They are never written to disk.
             </p>
           </section>
+
         </div>
       </main>
     </div>
+  );
+}
+
+function DataPoint({ title, desc }: any) {
+  return (
+    <div className="border-l-2 border-[#00FFC2]/30 pl-4 py-1">
+      <h4 className="font-mono text-[#00FFC2] text-sm mb-1">{title}</h4>
+      <p className="text-white/60 text-sm font-light">{desc}</p>
+    </div>
+  );
+}
+
+function ExclusionItem({ label }: any) {
+  return (
+    <li className="flex items-center gap-3 text-white/50 font-mono text-xs">
+      <div className="w-1.5 h-1.5 bg-red-500/50 rounded-full"></div>
+      {label}
+    </li>
   );
 }
