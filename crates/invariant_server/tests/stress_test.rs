@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Invariant Protocol.
+ *
+ * This source code is licensed under the Business Source License (BSL 1.1) 
+ * found in the LICENSE.md file in the root directory of this source tree.
+ * * You may NOT use this code for active blocking or enforcement without a commercial license.
+ */
+
 use reqwest::{Client, header::{HeaderMap, HeaderValue}};
 use serde_json::json;
 use uuid::Uuid;

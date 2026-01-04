@@ -1,8 +1,10 @@
 /*
- * Copyright (c) 2025 Invariant Protocol
- * Use of this software is governed by the Business Source License.
+ * Copyright (c) 2026 Invariant Protocol.
+ *
+ * This source code is licensed under the Business Source License (BSL 1.1) 
+ * found in the LICENSE.md file in the root directory of this source tree.
+ * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
-
 use std::sync::Arc;
 use invariant_engine::InvariantEngine;
 use crate::db::PostgresStorage;

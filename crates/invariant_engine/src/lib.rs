@@ -1,11 +1,9 @@
 /*
- * Copyright (c) 2025 Invariant Protocol
- * Use of this software is governed by the Business Source License
- * included in the LICENSE file.
+ * Copyright (c) 2026 Invariant Protocol.
  *
- * As of the Change Date specified in that file, in accordance with
- * the Business Source License, use of this software will be governed
- * by the Apache License, Version 2.0.
+ * This source code is licensed under the Business Source License (BSL 1.1) 
+ * found in the LICENSE.md file in the root directory of this source tree.
+ * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 /// The logic core for mining "Proof of Persistence".

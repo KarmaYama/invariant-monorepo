@@ -1,4 +1,10 @@
-// invariant_sdk/lib/src/api_client.dart
+/*
+ * Copyright (c) 2026 Invariant Protocol.
+ *
+ * This source code is licensed under the Business Source License (BSL 1.1) 
+ * found in the LICENSE.md file in the root directory of this source tree.
+ * * You may NOT use this code for active blocking or enforcement without a commercial license.
+ */
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 

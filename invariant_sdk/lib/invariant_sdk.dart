@@ -1,4 +1,11 @@
-// lib/invariant_sdk.dart
+/*
+ * Copyright (c) 2026 Invariant Protocol.
+ *
+ * This source code is licensed under the Business Source License (BSL 1.1) 
+ * found in the LICENSE.md file in the root directory of this source tree.
+ * * You may NOT use this code for active blocking or enforcement without a commercial license.
+ */
+
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'src/api_client.dart'; // We will create this next
