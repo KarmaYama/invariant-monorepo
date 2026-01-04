@@ -1,8 +1,9 @@
+// invariant-web/src/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, Terminal, Cpu, Activity, ChevronRight, Lock, Server, Smartphone } from "lucide-react";
+import { ShieldCheck, Terminal, Cpu, Activity, ChevronRight, Lock, Server, Smartphone, Download } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { fetchNetworkStats } from "@/lib/api";
@@ -69,17 +70,24 @@ export default function Landing() {
               </p>
               
               {/* --- ACTION LINKS --- */}
-              <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
+              <div className="flex flex-col sm:flex-row gap-8 sm:items-center">
                 
-                {/* 1. PRIMARY CTA: SDK DOCS */}
-                <a href="/docs" className="group flex items-center space-x-3 border-b border-[#00FFC2] pb-2 hover:opacity-80 transition-opacity">
+                {/* 1. FOR USERS: PILOT ACCESS (New) */}
+                <a href="/pilot" className="group relative flex items-center space-x-3 bg-white/5 border border-white/10 px-6 py-3 rounded hover:border-[#00FFC2] transition-colors">
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#00FFC2] rounded-full animate-pulse"></div>
+                  <Smartphone size={18} className="text-[#00FFC2]" />
+                  <span className="font-mono text-sm tracking-widest text-white font-bold group-hover:text-[#00FFC2] transition-colors">JOIN PILOT</span>
+                </a>
+
+                {/* 2. FOR CRAIG/DEVS: SDK DOCS */}
+                <a href="/docs" className="group flex items-center space-x-3 border-b border-[#00FFC2]/30 pb-1 hover:border-[#00FFC2] transition-colors">
                   <Terminal size={18} className="text-[#00FFC2]" />
                   <span className="font-mono text-sm tracking-widest text-[#00FFC2] font-bold">INTEGRATE SDK</span>
                 </a>
 
-                {/* 2. SECONDARY CTA: WHITEPAPER */}
-                <a href="/whitepaper" className="group flex items-center space-x-2 border-b border-white/30 pb-2 hover:border-white transition-colors">
-                  <span className="font-mono text-sm tracking-widest text-white/60 group-hover:text-white transition-colors">ARCHITECTURE</span>
+                {/* 3. ARCHITECTURE */}
+                <a href="/whitepaper" className="group flex items-center space-x-2 border-b border-white/30 pb-1 hover:border-white transition-colors">
+                  <span className="font-mono text-sm tracking-widest text-white/60 group-hover:text-white transition-colors">WHITE PAPER</span>
                   <ChevronRight className="text-white/60 group-hover:text-white group-hover:translate-x-1 transition-transform" size={16} />
                 </a>
 

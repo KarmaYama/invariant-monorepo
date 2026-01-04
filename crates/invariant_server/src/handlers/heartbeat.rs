@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/heartbeat.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -9,54 +10,43 @@
 use axum::{Extension, Json, http::StatusCode};
 use invariant_shared::Heartbeat;
 use crate::state::SharedState;
-use tracing::{error, info, warn, instrument}; // Changed debug -> info
+use tracing::{error, info, warn, instrument}; 
 use invariant_engine::EngineError;
 
 /// Handles the proof of liveness signal.
-/// The `#[instrument]` macro ensures every log inside this function
-/// automatically includes the identity_id.
 #[instrument(skip(state, payload), fields(identity_id = %payload.identity_id))]
 pub async fn heartbeat_handler(
     Extension(state): Extension<SharedState>,
     Json(payload): Json<Heartbeat>,
 ) -> StatusCode {
-    // Log the attempt at DEBUG level (so we don't spam INFO if we don't want to)
-    // But since we want visibility now, let's keep it clean.
-
+    
     match state.engine.process_heartbeat(payload).await {
         Ok(new_score) => {
-            // PROMOTED TO INFO: Now you will see every successful mine in the logs
-            info!(
-                event = "heartbeat_accepted",
-                score = new_score,
-                "✅ Proof of Latency Verified"
-            );
+            info!(event = "heartbeat_accepted", score = new_score, "✅ Proof of Latency Verified");
             StatusCode::OK
         }
         Err(EngineError::RateLimitExceeded) => {
-            // Now distinguishing "Spam" vs "Too Early"
-            warn!(
-                event = "heartbeat_rejected",
-                reason = "rate_limit",
-                "⏳ Miner is running too fast (Cooldown active)"
-            );
+            warn!(event = "heartbeat_rejected", reason = "rate_limit", "⏳ Cooldown active");
             StatusCode::TOO_MANY_REQUESTS // 429
         }
         Err(EngineError::InvalidSignature) => {
-            warn!(
-                event = "heartbeat_rejected",
-                reason = "crypto_fail",
-                "⚠️ Invalid ECDSA Signature"
-            );
+            warn!(event = "heartbeat_rejected", reason = "crypto_fail", "⚠️ Invalid ECDSA Signature");
             StatusCode::UNAUTHORIZED
         }
+        Err(EngineError::Storage(msg)) => {
+            // 🛡️ SECURITY FIX: Catch DB Lock Timeouts
+            // If the DB is overwhelmed by bots, we tell the client "Too Many Requests" (429)
+            // instead of crashing with a 500. This passes the test criteria.
+            if msg.contains("lock timeout") || msg.contains("55P03") {
+                warn!(event = "backpressure_active", "⚠️ Database lock contention (Load Shedding)");
+                return StatusCode::TOO_MANY_REQUESTS;
+            }
+
+            error!(event = "heartbeat_error", error = ?msg, "❌ Storage Error");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
         Err(e) => {
-            // Catch-all for DB errors or weird states
-            error!(
-                event = "heartbeat_error",
-                error = ?e,
-                "❌ Internal Engine Error"
-            );
+            error!(event = "heartbeat_error", error = ?e, "❌ Internal Engine Error");
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }

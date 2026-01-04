@@ -1,3 +1,4 @@
+// crates/invariant_server/src/db.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -98,8 +99,18 @@ impl IdentityStorage for PostgresStorage {
     }
 
     async fn log_heartbeat(&self, identity: &Identity, heartbeat: &Heartbeat) -> Result<u64, EngineError> {
+        // 1. Start Transaction
         let mut tx = self.pool.begin().await.map_err(|e| EngineError::Storage(e.to_string()))?;
 
+        // 🛡️ SECURITY FIX: FAIL FAST
+        // If a row is locked for more than 1 second (1000ms), ABORT the transaction.
+        // This prevents 1,500 bots from hanging the entire server connection pool.
+        // The error returned will be a "lock timeout", which we map to 429 in the handler.
+        if let Err(e) = sqlx::query("SET LOCAL lock_timeout = '1000ms'").execute(&mut *tx).await {
+            return Err(EngineError::Storage(e.to_string()));
+        }
+
+        // 2. Atomic Update (The Contention Point)
         let row = sqlx::query("
             UPDATE identities 
             SET 
@@ -120,6 +131,7 @@ impl IdentityStorage for PostgresStorage {
 
         let new_score: i64 = row.try_get("continuity_score").map_err(|e| EngineError::Storage(e.to_string()))?;
 
+        // 3. Log Heartbeat (With Idempotency)
         let insert_result = sqlx::query("INSERT INTO heartbeats (identity_id, device_signature, timestamp) VALUES ($1, $2, $3)")
             .bind(heartbeat.identity_id)
             .bind(&heartbeat.device_signature)
@@ -133,8 +145,10 @@ impl IdentityStorage for PostgresStorage {
                 Ok(new_score as u64)
             },
             Err(e) => {
+                // If the heartbeat already exists (Idempotency), we still return success 
+                // for the score so the client doesn't retry unnecessarily.
                 if let Some(db_err) = e.as_database_error() {
-                    if db_err.code().as_deref() == Some("23505") {
+                    if db_err.code().as_deref() == Some("23505") { // Unique Violation
                         return Ok(identity.continuity_score); 
                     }
                 }
@@ -164,8 +178,6 @@ impl IdentityStorage for PostgresStorage {
     }
 
     async fn set_username(&self, id: &Uuid, username: &str) -> Result<bool, EngineError> {
-        // Attempts to set username. Fails if ID doesn't exist OR username is not NULL.
-        // The UNIQUE constraint in Postgres handles global uniqueness collisions.
         let result = sqlx::query("UPDATE identities SET username = $1 WHERE id = $2 AND username IS NULL")
             .bind(username)
             .bind(id)

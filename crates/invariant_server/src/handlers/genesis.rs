@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/genesis.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -15,6 +16,9 @@ use tracing::{error, info, warn, instrument};
 use rand::{Rng, thread_rng};
 use redis::AsyncCommands; 
 
+// 🛡️ SECURITY: In-Memory Rate Limiter
+// We use a simple Mutex map to track IPs. In a clustered deployment, 
+// you would move this logic to Redis, but for a single node, this is faster.
 use std::sync::Mutex;
 use std::collections::HashMap;
 use std::time::{Instant, Duration};
@@ -23,6 +27,7 @@ use once_cell::sync::Lazy;
 const NONCE_TTL_SECONDS: u64 = 300; 
 const CONFIG_KEY_PAUSED: &str = "invariant:config:genesis_paused";
 
+// Rate Limit: 100 requests per IP per hour.
 static RATE_LIMITER: Lazy<Mutex<HashMap<String, (u32, Instant)>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
@@ -32,12 +37,13 @@ fn check_rate_limit(ip: String) -> bool {
     
     let (count, last_reset) = store.entry(ip.clone()).or_insert((0, Instant::now()));
 
+    // Reset window every hour
     if last_reset.elapsed() > Duration::from_secs(3600) {
         *count = 0;
         *last_reset = Instant::now();
     }
 
-    if *count >= 100 { // Increased limit for B2B usage/testing
+    if *count >= 100 { 
         warn!("Rate Limit Exceeded for IP: {}", ip);
         return false;
     }
@@ -46,6 +52,8 @@ fn check_rate_limit(ip: String) -> bool {
     true
 }
 
+/// GET /genesis/challenge
+/// Returns a 5-minute cryptographic nonce for the TEE to sign.
 pub async fn get_challenge_handler(
     Extension(state): Extension<SharedState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -53,6 +61,7 @@ pub async fn get_challenge_handler(
     
     let ip = addr.ip().to_string();
     if !check_rate_limit(ip) {
+        // 429 Too Many Requests - The "Bouncer" blocks the door.
         return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Rate limit exceeded. Try again later." })));
     }
 
@@ -64,6 +73,7 @@ pub async fn get_challenge_handler(
         }
     };
 
+    // Feature Flag Check
     let is_paused: bool = conn.exists(CONFIG_KEY_PAUSED).await.unwrap_or(false);
     if is_paused {
         return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Genesis paused." })));
@@ -108,6 +118,7 @@ pub async fn genesis_handler(
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
 
+    // Atomic Get & Delete - Prevents Replay Attacks
     let val: Option<String> = match conn.get_del(&redis_key).await {
         Ok(v) => v,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Nonce Validation Error" })))
@@ -133,7 +144,8 @@ pub async fn genesis_handler(
     }
 }
 
-/// STATELESS VERIFICATION (For the SDK/Shadow Filter) - NO DB WRITE
+/// STATELESS VERIFICATION (For the SDK/B2B) - NO DB WRITE
+/// This is the endpoint Craig's partners will use.
 #[instrument(skip(state, payload))]
 pub async fn verify_stateless_handler(
     Extension(state): Extension<SharedState>,
@@ -146,14 +158,12 @@ pub async fn verify_stateless_handler(
     };
 
     // 2. Check Nonce (Anti-Replay)
-    // We strictly enforce nonce freshness even for stateless checks to prevent
-    // attackers from replaying a captured valid attestation from a legitimate device.
+    // Even for stateless verification, we enforce freshness.
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
 
     let val: Option<String> = conn.get_del(&redis_key).await.unwrap_or(None);
     if val.is_none() {
-        // 
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ 
             "verified": false,
             "error": "Invalid or Expired Challenge" 
