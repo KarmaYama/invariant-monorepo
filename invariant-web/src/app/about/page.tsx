@@ -38,8 +38,8 @@ export default function About() {
               Focuses on the <strong>Rust Attestation Engine</strong> and hardware constraints. Responsible for the backend architecture, TEE integration logic, and the "Proof of Latency" mechanism.
             </p>
             <div className="flex space-x-6">
-              <SocialLink icon={<Github size={20} />} label="GITHUB" href="#" />
-              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:alex@invariant.tech" />
+              <SocialLink icon={<Github size={20} />} label="GITHUB" href="https://github.com/KarmaYama" />
+              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:alex@invariantprotocol.com" />
             </div>
           </div>
 
@@ -53,8 +53,8 @@ export default function About() {
               Manages the <strong>Web Infrastructure</strong> and operational strategy. Responsible for the frontend experience, partner integrations, and ensuring the protocol is usable by humans.
             </p>
             <div className="flex space-x-6">
-              <SocialLink icon={<Linkedin size={20} />} label="LINKEDIN" href="#" />
-              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:cristobal@invariant.tech" />
+              <SocialLink icon={<Github size={20} />} label="GITHUB" href="https://github.com/ToTozudo" />
+              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:cristobal@invariantprotocol.com" />
             </div>
           </div>
 

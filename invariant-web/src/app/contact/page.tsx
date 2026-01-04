@@ -1,36 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Mail, MessageSquare } from "lucide-react";
+import { ArrowLeft, Mail, LifeBuoy, Building2, ShieldAlert } from "lucide-react";
 
 export default function Contact() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black flex flex-col">
-      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center">
+      
+      {/* NAV */}
+      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
           <ArrowLeft size={18} />
-          <span className="text-sm font-mono">RETURN</span>
+          <span className="text-sm font-mono tracking-widest">RETURN</span>
         </Link>
       </nav>
 
-      <main className="grow flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full text-center">
-          <h1 className="text-5xl font-serif mb-6">Signal over Noise.</h1>
-          <p className="text-white/60 font-light mb-12">
-            We are currently in Stealth / Genesis Mode. We prioritize encrypted channels and high-signal communication.
+      <main className="grow pt-32 pb-24 px-6 max-w-5xl mx-auto w-full">
+        
+        {/* HEADER */}
+        <div className="mb-16 border-b border-white/10 pb-12">
+          <h1 className="text-4xl md:text-5xl font-serif mb-6">Contact Invariant.</h1>
+          <p className="text-white/60 font-light text-lg max-w-2xl leading-relaxed">
+            We are currently prioritizing enterprise integration partners and pilot participants. 
+            Please direct your inquiry to the relevant department below.
           </p>
+        </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <a href="mailto:genesis@invariant.tech" className="flex items-center justify-center space-x-3 p-8 border border-white/10 bg-white/5 hover:border-[#00FFC2] hover:text-[#00FFC2] transition-all group">
-              <Mail size={24} />
-              <span className="font-mono text-sm">GENESIS@INVARIANT.TECH</span>
-            </a>
-            <a href="https://discord.gg/invariant" className="flex items-center justify-center space-x-3 p-8 border border-white/10 bg-white/5 hover:border-[#00FFC2] hover:text-[#00FFC2] transition-all group">
-              <MessageSquare size={24} />
-              <span className="font-mono text-sm">ENCRYPTED COMMS</span>
-            </a>
+        {/* DEPARTMENT GRID */}
+        <div className="grid md:grid-cols-2 gap-6 mb-24">
+          
+          {/* 1. COMMERCIAL / PARTNERSHIPS */}
+          <a href="mailto:partners@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-[#00FFC2]/50 transition-all">
+            <div className="flex justify-between items-start mb-6">
+              <Building2 className="text-[#00FFC2]" size={28} />
+              <span className="text-xs font-mono text-white/30 uppercase tracking-widest group-hover:text-[#00FFC2] transition-colors">Commercial</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Partnerships & Integration</h3>
+            <p className="text-sm text-white/50 font-light mb-6">
+              For Fintechs, DAOs, and platforms seeking to integrate the Invariant SDK.
+            </p>
+            <span className="text-[#00FFC2] text-sm font-mono border-b border-[#00FFC2]/30 pb-1">partners@invariantprotocol.com</span>
+          </a>
+
+          {/* 2. PILOT SUPPORT */}
+          <a href="mailto:pilot@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+            <div className="flex justify-between items-start mb-6">
+              <LifeBuoy className="text-white/60 group-hover:text-white transition-colors" size={28} />
+              <span className="text-xs font-mono text-white/30 uppercase tracking-widest">Technical</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Pilot Support</h3>
+            <p className="text-sm text-white/50 font-light mb-6">
+              For Founding Agents participating in the Testnet V1. Report bugs or request assistance.
+            </p>
+            <span className="text-white/80 text-sm font-mono border-b border-white/30 pb-1">pilot@invariantprotocol.com</span>
+          </a>
+
+          {/* 3. SECURITY DISCLOSURE */}
+          <a href="mailto:security@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+            <div className="flex justify-between items-start mb-6">
+              <ShieldAlert className="text-amber-500" size={28} />
+              <span className="text-xs font-mono text-white/30 uppercase tracking-widest">Security</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Responsible Disclosure</h3>
+            <p className="text-sm text-white/50 font-light mb-6">
+              Report vulnerabilities regarding the Rust Engine or Android TEE Attestation.
+            </p>
+            <span className="text-white/80 text-sm font-mono border-b border-white/30 pb-1">security@invariantprotocol.com</span>
+          </a>
+
+          {/* 4. GENERAL */}
+          <a href="mailto:hello@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+            <div className="flex justify-between items-start mb-6">
+              <Mail className="text-white/60" size={28} />
+              <span className="text-xs font-mono text-white/30 uppercase tracking-widest">General</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">General Inquiries</h3>
+            <p className="text-sm text-white/50 font-light mb-6">
+              Media, press, and general information about the protocol.
+            </p>
+            <span className="text-white/80 text-sm font-mono border-b border-white/30 pb-1">hello@invariantprotocol.com</span>
+          </a>
+
+        </div>
+
+        {/* FOOTER DETAILS */}
+        <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between gap-8 text-sm text-white/40 font-mono">
+          <div>
+            <p className="mb-2 text-white/20 uppercase tracking-widest text-xs">Headquarters</p>
+            <p>London, United Kingdom</p>
+          </div>
+          <div>
+            <p className="mb-2 text-white/20 uppercase tracking-widest text-xs">Response Time</p>
+            <p>Commercial: &lt; 24 Hours</p>
+            <p>General: 48-72 Hours</p>
           </div>
         </div>
+
       </main>
     </div>
   );

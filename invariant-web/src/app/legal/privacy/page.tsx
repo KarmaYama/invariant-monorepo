@@ -17,8 +17,8 @@ export default function Privacy() {
         <div className="mb-12 border-b border-white/10 pb-8">
           <h1 className="text-4xl font-serif mb-4">Privacy Architecture</h1>
           <p className="text-white/60 font-light text-lg">
-            Invariant is designed as a <span className="text-white">Zero-Knowledge Infrastructure</span>. 
-            We verify the device, not the user.
+            Invariant is designed as a <span className="text-white">Zero-Knowledge-Inspired Infrastructure</span>. 
+            We verify hardware-backed execution, not user identity.
           </p>
         </div>
 
@@ -52,7 +52,7 @@ export default function Privacy() {
               />
               <DataPoint 
                 title="Ephemeral Public Keys"
-                desc="A P-256 public key generated inside the Secure Element. This key is mathematically unrelated to the user's identity."
+                desc="A P-256 public key generated inside hardware-backed secure execution (TEE / Secure Element). This key is mathematically unrelated to the user's identity."
               />
               <DataPoint 
                 title="Cryptographic Heartbeats"
@@ -71,7 +71,7 @@ export default function Privacy() {
               <p className="text-white/70 font-light mb-4">
                 The Invariant SDK operates sandbox-isolated and does not request the following permissions:
               </p>
-              <ul className="grid md:grid-cols-2 gap-y-3 gap-x-8">
+              <ul className="grid md:grid-cols-2 gap-y-3 gap-x-8 mb-6">
                 <ExclusionItem label="Biometric Data (FaceID/Fingerprint)" />
                 <ExclusionItem label="GPS / Geolocation History" />
                 <ExclusionItem label="Phone Numbers / SMS Logs" />
@@ -79,6 +79,9 @@ export default function Privacy() {
                 <ExclusionItem label="Advertising ID (GAID/IDFA)" />
                 <ExclusionItem label="App Usage History" />
               </ul>
+              <p className="text-white/40 text-xs italic border-t border-white/10 pt-4">
+                Invariant remains fully functional without access to any of the above.
+              </p>
             </div>
           </section>
 
@@ -89,7 +92,7 @@ export default function Privacy() {
               <h2 className="text-2xl font-serif text-white">4. Identifier Hashing</h2>
             </div>
             <p className="text-white/70 font-light leading-relaxed">
-              To prevent device fingerprinting across different applications, any hardware identifiers are strictly <strong>Salted and Hashed (SHA-256)</strong> before persistence. 
+              To prevent device fingerprinting across different applications, any hardware identifiers are strictly <strong>Salted and Hashed (SHA-256 with per-context salts)</strong> before persistence. 
               <br/><br/>
               Raw hardware serial numbers are processed in-memory during the handshake and discarded immediately. They are never written to disk.
             </p>

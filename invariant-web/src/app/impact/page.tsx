@@ -117,7 +117,7 @@ export default function Impact() {
               After 30 days, compare our device classifications against your internal fraud outcomes.
             </p>
           </div>
-          <Link href="mailto:pilot@invariant.tech" className="px-8 py-4 bg-[#00FFC2] text-black font-mono font-bold text-sm tracking-wide hover:bg-[#00FFC2]/90 transition-colors rounded-sm whitespace-nowrap">
+          <Link href="mailto:partners@invariantprotocol.com" className="px-8 py-4 bg-[#00FFC2] text-black font-mono font-bold text-sm tracking-wide hover:bg-[#00FFC2]/90 transition-colors rounded-sm whitespace-nowrap">
             START SHADOW PILOT
           </Link>
         </div>

@@ -25,18 +25,24 @@ pub async fn heartbeat_handler(
             info!(event = "heartbeat_accepted", score = new_score, "✅ Proof of Latency Verified");
             StatusCode::OK
         }
+        // 1. RATE LIMIT (429)
         Err(EngineError::RateLimitExceeded) => {
             warn!(event = "heartbeat_rejected", reason = "rate_limit", "⏳ Cooldown active");
-            StatusCode::TOO_MANY_REQUESTS // 429
+            StatusCode::TOO_MANY_REQUESTS 
         }
+        // 2. INVALID SIGNATURE (401)
         Err(EngineError::InvalidSignature) => {
             warn!(event = "heartbeat_rejected", reason = "crypto_fail", "⚠️ Invalid ECDSA Signature");
             StatusCode::UNAUTHORIZED
         }
+        // 3. IDENTITY NOT FOUND (404) - <--- THIS FIXES YOUR "CRITICAL FAILURE"
+        Err(EngineError::IdentityNotFound(_)) => {
+            warn!(event = "heartbeat_rejected", reason = "unknown_identity", "👻 Ghost ID rejected");
+            StatusCode::NOT_FOUND
+        }
+        // 4. DATABASE BACKPRESSURE (429 or 500)
         Err(EngineError::Storage(msg)) => {
-            // 🛡️ SECURITY FIX: Catch DB Lock Timeouts
             // If the DB is overwhelmed by bots, we tell the client "Too Many Requests" (429)
-            // instead of crashing with a 500. This passes the test criteria.
             if msg.contains("lock timeout") || msg.contains("55P03") {
                 warn!(event = "backpressure_active", "⚠️ Database lock contention (Load Shedding)");
                 return StatusCode::TOO_MANY_REQUESTS;
@@ -45,6 +51,7 @@ pub async fn heartbeat_handler(
             error!(event = "heartbeat_error", error = ?msg, "❌ Storage Error");
             StatusCode::INTERNAL_SERVER_ERROR
         }
+        // 5. CATCH ALL (500)
         Err(e) => {
             error!(event = "heartbeat_error", error = ?e, "❌ Internal Engine Error");
             StatusCode::INTERNAL_SERVER_ERROR
