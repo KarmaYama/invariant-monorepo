@@ -1,4 +1,3 @@
-// invariant-web/src/app/layout.tsx
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
@@ -8,12 +7,12 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 const serif = Playfair_Display({ subsets: ["latin"], variable: "--font-serif" });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://invariantprotocol.com'), // 🟢 UPDATED DOMAIN
+  metadataBase: new URL('https://invariantprotocol.com'),
   title: {
-    default: "Invariant | Proof of Device",
-    template: "%s | Invariant Protocol"
+    default: "Invariant | Hardware-Based Identity Protocol",
+    template: "%s | Invariant"
   },
-  description: "Hardware-entangled identity infrastructure. A decentralized Sybil-resistance layer for the AI age.",
+  description: "Stop bot traffic at the hardware layer. Invariant uses Android Secure Enclaves to verify physical devices without collecting PII. Integrate the SDK in 15 minutes.",
   openGraph: {
     title: "Invariant Protocol",
     description: "Proof of Device. Validating silicon, not behavior.",

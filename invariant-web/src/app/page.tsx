@@ -1,14 +1,15 @@
-// invariant-web/src/app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, Terminal, Cpu, Activity, ChevronRight, Lock, Server, Smartphone, Download } from "lucide-react";
+import { 
+  ShieldCheck, Terminal, Cpu, Activity, ChevronRight, 
+  Smartphone, Zap, Lock, Code2, LineChart 
+} from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { fetchNetworkStats } from "@/lib/api";
 
-// CONSERVATIVE ESTIMATE: Hardware + 14 Days OpEx per Node
 const COST_PER_NODE = 150; 
 
 export default function Landing() {
@@ -49,53 +50,65 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="border-b border-white/10 pb-12 mb-16"
+            className="border-b border-white/10 pb-12 mb-12"
           >
             <div className="flex items-center space-x-3 mb-6">
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FFC2] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-[#00FFC2]"></span>
               </span>
-              <span className="font-mono text-xs text-[#00FFC2] tracking-[0.2em]">TESTNET V1 LIVE</span>
+              <span className="font-mono text-xs text-[#00FFC2] tracking-[0.2em] font-bold">TESTNET V1 LIVE</span>
             </div>
             
             <h1 className="text-6xl md:text-8xl font-serif tracking-tight mb-8 leading-none">
-              The Hardware <br/> <span className="text-white">Layer</span><span className="text-[#00FFC2]">.</span>
+              Identity, <br/> Anchored to <span className="text-[#00FFC2]">Device.</span>
             </h1>
             
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
-              <p className="text-xl md:text-2xl text-white/60 max-w-2xl font-light leading-relaxed">
-                Stop validating software. Start validating silicon. <br/>
-                Invariant filters 99% of automated traffic by verifying the <span className="text-white font-normal">Trusted Execution Environment (TEE)</span> in user devices.
+              <p className="text-lg md:text-2xl text-white/60 max-w-2xl font-light leading-relaxed">
+                Block botnets at source by verifying the Secure Enclave in smartphones. <br/>
+                No PII, no biometrics — just deterministic device attestation.
               </p>
               
               {/* --- ACTION LINKS --- */}
-              <div className="flex flex-col sm:flex-row gap-8 sm:items-center">
-                
-                {/* 1. FOR USERS: PILOT ACCESS (New) */}
-                <a href="/pilot" className="group relative flex items-center space-x-3 bg-white/5 border border-white/10 px-6 py-3 rounded hover:border-[#00FFC2] transition-colors">
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#00FFC2] rounded-full animate-pulse"></div>
-                  <Smartphone size={18} className="text-[#00FFC2]" />
-                  <span className="font-mono text-sm tracking-widest text-white font-bold group-hover:text-[#00FFC2] transition-colors">JOIN PILOT</span>
+              <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
+                <a 
+                  href="/pilot" 
+                  data-analytics-id="hero_cta_pilot"
+                  className="group relative flex items-center justify-center space-x-3 bg-[#00FFC2] text-black px-8 py-4 rounded font-mono font-bold text-sm tracking-wide hover:bg-[#00FFC2]/90 hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,194,0.3)]"
+                >
+                  <Smartphone size={18} />
+                  <span>Join Pilot</span>
                 </a>
-
-                {/* 2. FOR CRAIG/DEVS: SDK DOCS */}
-                <a href="/docs" className="group flex items-center space-x-3 border-b border-[#00FFC2]/30 pb-1 hover:border-[#00FFC2] transition-colors">
-                  <Terminal size={18} className="text-[#00FFC2]" />
-                  <span className="font-mono text-sm tracking-widest text-[#00FFC2] font-bold">INTEGRATE SDK</span>
-                </a>
-
-                {/* 3. ARCHITECTURE */}
-                <a href="/whitepaper" className="group flex items-center space-x-2 border-b border-white/30 pb-1 hover:border-white transition-colors">
-                  <span className="font-mono text-sm tracking-widest text-white/60 group-hover:text-white transition-colors">WHITE PAPER</span>
+                <a 
+                  href="/docs" 
+                  data-analytics-id="hero_cta_docs"
+                  className="group flex items-center justify-center space-x-2 px-6 py-4 border border-white/20 rounded hover:border-white hover:bg-white/5 transition-all"
+                >
+                  <span className="font-mono text-sm text-white font-bold">Integrate SDK</span>
                   <ChevronRight className="text-white/60 group-hover:text-white group-hover:translate-x-1 transition-transform" size={16} />
                 </a>
-
               </div>
             </div>
           </motion.div>
 
-          {/* DYNAMIC METRICS GRID */}
+          {/* TRUST WEDGE */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24 opacity-80">
+            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
+              <ShieldCheck size={16} className="text-[#00FFC2]" />
+              <span>TESTNET V1 • 20+ ACTIVE NODES</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
+              <Lock size={16} className="text-[#00FFC2]" />
+              <span>ZERO PII: NO GPS • NO CONTACTS</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
+              <Zap size={16} className="text-[#00FFC2]" />
+              <span>&lt;200ms VERIFICATION (TYPICAL)</span>
+            </div>
+          </div>
+
+          {/* DYNAMIC METRICS */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-white/10 border border-white/10 mb-32">
             <MetricCard 
               icon={<Activity size={18} />}
@@ -111,63 +124,89 @@ export default function Landing() {
             />
             <MetricCard 
               icon={<Cpu size={18} />}
-              label="NETWORK STAKE" 
+              label="FORGERY COST" 
               value={stats.forgeryCost > 0 ? `$${stats.forgeryCost.toLocaleString()}` : "---"} 
-              sub="USD (PHYSICAL)"
+              sub="USD"
             />
             <MetricCard 
               icon={<Terminal size={18} />}
-              label="NODE STATUS" 
+              label="NETWORK STATUS" 
               value={stats.status}
               color={stats.status === 'HEALTHY' ? "text-[#00FFC2]" : "text-amber-500"}
             />
           </div>
 
-          {/* PROBLEM / SOLUTION */}
-          <div className="grid md:grid-cols-2 gap-24 mb-32">
-            <div>
-              <h2 className="text-4xl font-serif mb-6">The Zero-Cost Attack.</h2>
-              <p className="text-white/60 text-lg leading-relaxed mb-8">
-                Generative AI creates infinite fake identities at $0.001 per instance. 
-                Traditional checks (IP, Email, CAPTCHA) are software-based and easily spoofed. 
-                <span className="text-white block mt-4">If identity is free, trust is impossible.</span>
-              </p>
-              <a href="/impact" className="text-[#00FFC2] font-mono text-sm border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1">
-                SEE THE FRAUD DATA
-              </a>
-            </div>
-            <div>
-              <h2 className="text-4xl font-serif mb-6">The CapEx Defense.</h2>
-              <p className="text-white/60 text-lg leading-relaxed mb-8">
-                We anchor identity to the <span className="text-white">Android Keystore System</span>. 
-                To forge an Invariant identity, an attacker must purchase a physical device ($40+) and maintain power.
-                <span className="text-white block mt-4">We turn spam from a software problem into a financial problem.</span>
-              </p>
-              <a href="/docs" className="text-[#00FFC2] font-mono text-sm border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1">
-                READ INTEGRATION GUIDE
-              </a>
-            </div>
-          </div>
+          {/* SEGMENTATION: REORDERED FOR IMPACT */}
+          <div className="mb-32">
+            <h2 className="text-sm font-mono text-[#00FFC2] mb-12 tracking-widest uppercase">Choose Your Interface</h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              
+              {/* 1. ENTERPRISE (Left) */}
+              <div className="group p-8 border border-white/10 bg-white/5 rounded-lg hover:border-[#00FFC2]/30 transition-all">
+                <LineChart className="text-white/40 mb-6 group-hover:text-[#00FFC2] transition-colors" size={32} />
+                <h3 className="text-2xl font-serif text-white mb-4">Enterprise & Security</h3>
+                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
+                  Stop bleeding ad spend to bots. Filter non-hardware-backed traffic before it hits your signup flow.
+                </p>
+                <ul className="space-y-3 mb-8">
+                  <ListItem text="Slash fraud ops costs" />
+                  <ListItem text="Protect referral budgets" />
+                  <ListItem text="No user friction added" />
+                </ul>
+                <a 
+                  href="/impact" 
+                  data-analytics-id="segment_cta_enterprise"
+                  className="text-[#00FFC2] font-mono text-xs font-bold border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 uppercase"
+                >
+                  View Fraud Models
+                </a>
+              </div>
 
-          {/* HOW IT WORKS */}
-          <div className="border-t border-white/10 pt-24 mb-32">
-            <h2 className="text-sm font-mono text-[#00FFC2] mb-12 tracking-widest uppercase">The Verification Standard</h2>
-            <div className="grid md:grid-cols-3 gap-12">
-              <Feature 
-                icon={<Lock />}
-                title="1. Challenge"
-                desc="The protocol issues a cryptographic nonce to the client. The device must sign this nonce inside its Secure Enclave (StrongBox)."
-              />
-              <Feature 
-                icon={<Smartphone />}
-                title="2. Attestation"
-                desc="The device returns an X.509 Certificate Chain rooted in the Google Hardware Trust Anchor. Emulators cannot produce this root."
-              />
-              <Feature 
-                icon={<Server />}
-                title="3. Verification"
-                desc="Our Rust backend parses the ASN.1 chain, verifies the signature, and confirms the device is physical, not virtual."
-              />
+              {/* 2. FOUNDING NODES (Center - Highlighted) */}
+              <div className="group p-8 border border-[#00FFC2]/20 bg-white/5 rounded-lg hover:border-[#00FFC2] transition-all relative overflow-hidden transform md:-translate-y-4 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+                <div className="absolute top-0 right-0 bg-[#00FFC2] text-black text-[10px] font-bold px-3 py-1 font-mono">RECRUITING</div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-[#00FFC2] to-transparent opacity-50"></div>
+                
+                <Smartphone className="text-[#00FFC2] mb-6" size={32} />
+                <h3 className="text-2xl font-serif text-white mb-4">Founding Nodes</h3>
+                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
+                  Your phone is the anchor. Run the node to secure the graph and earn Genesis status.
+                </p>
+                <ul className="space-y-3 mb-8">
+                  <ListItem text="Zero daily tasks" />
+                  <ListItem text="<1% Battery usage" />
+                  <ListItem text="Permanent Genesis Badge" />
+                </ul>
+                <a 
+                  href="/pilot" 
+                  data-analytics-id="segment_cta_pilot"
+                  className="inline-block bg-[#00FFC2] text-black px-6 py-3 rounded font-mono text-xs font-bold hover:bg-[#00FFC2]/90 transition-colors uppercase"
+                >
+                  Deploy Node
+                </a>
+              </div>
+
+              {/* 3. DEVELOPER (Right) */}
+              <div className="group p-8 border border-white/10 bg-white/5 rounded-lg hover:border-[#00FFC2]/30 transition-all">
+                <Code2 className="text-white/40 mb-6 group-hover:text-[#00FFC2] transition-colors" size={32} />
+                <h3 className="text-2xl font-serif text-white mb-4">Developers</h3>
+                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
+                  Integrate "Proof of Device" with 3 lines of code. Run in Shadow Mode to audit your traffic quality silently.
+                </p>
+                <ul className="space-y-3 mb-8">
+                  <ListItem text="Flutter & Native SDKs" />
+                  <ListItem text="15-minute integration" />
+                  <ListItem text="Shadow Mode (Non-blocking)" />
+                </ul>
+                <a 
+                  href="/docs" 
+                  data-analytics-id="segment_cta_dev"
+                  className="text-[#00FFC2] font-mono text-xs font-bold border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 uppercase"
+                >
+                  Read Documentation
+                </a>
+              </div>
+
             </div>
           </div>
 
@@ -193,14 +232,11 @@ function MetricCard({ label, value, sub, color = "text-white", icon, font = "san
   );
 }
 
-function Feature({ icon, title, desc }: any) {
+function ListItem({ text }: { text: string }) {
   return (
-    <div>
-      <div className="text-[#00FFC2] mb-6 opacity-80">{icon}</div>
-      <h3 className="text-xl font-serif mb-4 text-white">{title}</h3>
-      <p className="text-sm text-white/50 leading-relaxed font-light">
-        {desc}
-      </p>
-    </div>
+    <li className="flex items-center text-sm text-white/80 font-light">
+      <div className="w-1 h-1 bg-[#00FFC2] rounded-full mr-3" />
+      {text}
+    </li>
   );
 }
