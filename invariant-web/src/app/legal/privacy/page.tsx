@@ -2,16 +2,13 @@
 
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Lock, FileX, Server } from "lucide-react";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function Privacy() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black">
-      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center">
-        <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <ArrowLeft size={18} />
-          <span className="text-sm font-mono tracking-widest">RETURN TO NETWORK</span>
-        </Link>
-      </nav>
+      <Header />
 
       <main className="max-w-3xl mx-auto pt-32 pb-24 px-6">
         <div className="mb-12 border-b border-white/10 pb-8">
@@ -100,6 +97,7 @@ export default function Privacy() {
 
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

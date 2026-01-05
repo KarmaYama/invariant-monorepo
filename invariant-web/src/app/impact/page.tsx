@@ -3,21 +3,13 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowLeft, Server, ShieldAlert, Lock, Zap, ShieldCheck } from "lucide-react";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function Impact() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black flex flex-col">
-      {/* NAV */}
-      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/5 z-50 px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="group flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-          <span className="text-xs font-mono tracking-widest">RETURN TO NETWORK</span>
-        </Link>
-        <div className="hidden md:flex items-center space-x-2">
-          <div className="w-2 h-2 rounded-full bg-[#00FFC2] animate-pulse"></div>
-          <span className="text-xs font-mono text-[#00FFC2] tracking-widest">LIVE SIGNAL</span>
-        </div>
-      </nav>
+      <Header />
 
       <main className="grow pt-32 pb-24 px-6 max-w-7xl mx-auto w-full">
         
@@ -123,6 +115,7 @@ export default function Impact() {
         </div>
 
       </main>
+      <Footer />
     </div>
   );
 }
