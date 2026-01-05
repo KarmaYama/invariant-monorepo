@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { 
-  Download, ShieldCheck, BatteryWarning, Signal, CheckCircle2, 
-  Smartphone, AlertTriangle, ArrowRight, Globe, Bot, Fingerprint, Hash 
+  Download, ShieldCheck, BatteryWarning, Signal, 
+  Bot, Fingerprint, Hash, Globe 
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -65,7 +64,6 @@ export default function PilotGuide() {
         {/* ⚠️ THE NO-HYPE DISCLAIMER */}
         <div className="border-l-4 border-amber-500 bg-amber-500/5 p-8 mb-24 rounded-r">
           <div className="flex items-start gap-4">
-            {/* REPLACED COINS WITH HASH TO REMOVE FINANCIAL SIGNALING */}
             <Hash className="text-amber-500 shrink-0 mt-1" size={24} />
             <div>
               <h3 className="text-amber-500 font-mono text-sm font-bold tracking-widest uppercase mb-2">Read Before Joining</h3>
@@ -92,20 +90,26 @@ export default function PilotGuide() {
           </p>
           
           <div className="flex flex-col items-center gap-4">
-            <a href="#" className="flex items-center gap-3 bg-[#00FFC2] text-black px-8 py-4 rounded font-mono font-bold text-base hover:bg-[#00FFC2]/90 hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,194,0.3)]">
+            {/* LINK UPDATED TO LOCAL ASSET */}
+            <a href="/invariant.apk" download className="flex items-center gap-3 bg-[#00FFC2] text-black px-8 py-4 rounded font-mono font-bold text-base hover:bg-[#00FFC2]/90 hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,194,0.3)]">
               <Download size={20} />
               DOWNLOAD PILOT NODE .APK
             </a>
-            {/* ADDED REPRODUCIBLE BUILD SIGNALING */}
-            <span className="text-xs font-mono text-[#00FFC2]/60">SHA-256 Verified • Reproducible Build • Source Available</span>
+            
+            {/* HASH UPDATED FROM YOUR LOGS */}
+            <div className="flex flex-col items-center gap-1 mt-2">
+              <span className="text-[10px] font-mono text-[#00FFC2]/60 uppercase tracking-widest">SHA-256 CHECKSUM</span>
+              <span className="text-[10px] font-mono text-white/30 bg-white/5 px-2 py-1 rounded select-all">
+                6DD7913EF6CA77B5D4B636D8BEE1D79860B03250ED265D1A54ECE36FFF0085E4
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* THE SURVIVAL GUIDE (Technical Instructions) */}
+        {/* THE SURVIVAL GUIDE */}
         <div className="space-y-12 mb-24 max-w-2xl mx-auto">
           <h2 className="text-xl font-mono text-white/40 uppercase tracking-widest border-b border-white/10 pb-4 mb-8">Operational Instructions</h2>
 
-          {/* STEP 1 */}
           <div className="flex gap-6 opacity-80 hover:opacity-100 transition-opacity">
             <div className="flex-none w-8 h-8 rounded bg-white/10 flex items-center justify-center font-mono font-bold text-[#00FFC2]">1</div>
             <div>
@@ -118,7 +122,6 @@ export default function PilotGuide() {
             </div>
           </div>
 
-          {/* STEP 2 */}
           <div className="flex gap-6 opacity-80 hover:opacity-100 transition-opacity">
             <div className="flex-none w-8 h-8 rounded bg-white/10 flex items-center justify-center font-mono font-bold text-amber-500">2</div>
             <div>
@@ -131,14 +134,12 @@ export default function PilotGuide() {
               <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded text-xs text-amber-200 font-mono inline-block">
                 Settings &gt; Apps &gt; Invariant &gt; Battery &gt; Unrestricted
               </div>
-              {/* ADDED OEM VARIABILITY DISCLAIMER */}
               <p className="text-white/40 text-xs mt-3 italic">
                 * Battery settings vary by manufacturer (Samsung, Xiaomi, etc.). If the app stops pulsing, search your device model + 'background battery settings'.
               </p>
             </div>
           </div>
 
-          {/* STEP 3 */}
           <div className="flex gap-6 opacity-80 hover:opacity-100 transition-opacity">
             <div className="flex-none w-8 h-8 rounded bg-white/10 flex items-center justify-center font-mono font-bold text-[#00FFC2]">3</div>
             <div>
