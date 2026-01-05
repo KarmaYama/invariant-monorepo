@@ -81,7 +81,7 @@ export default function Contact() {
         <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between gap-8 text-sm text-white/40 font-mono">
           <div>
             <p className="mb-2 text-white/20 uppercase tracking-widest text-xs">Location</p>
-            <p>London, United Kingdom</p>
+            <p>East Sussex, United Kingdom</p>
           </div>
           <div>
             <p className="mb-2 text-white/20 uppercase tracking-widest text-xs">Project Status</p>

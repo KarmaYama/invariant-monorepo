@@ -31,8 +31,8 @@ export function Footer() {
         </div>
 
         <div className="flex justify-between items-center pt-8 border-t border-white/5 text-xs font-mono text-white/30">
-          <div>© 2025 INVARIANT LABS</div>
-          <div>GENESIS_HASH: 0x8a...3f1</div>
+          <div>© 2025 Invariant Protocol</div>
+          <div>Built with ♥ in UK</div>
         </div>
       </div>
     </footer>
