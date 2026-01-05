@@ -1,23 +1,22 @@
 # netlify.toml
 [build]
-  # 1. Enter the frontend directory
   base = "invariant-web"
-  
-  # 2. Run the build command (uses the script in your package.json)
   command = "npm run build"
-  
-  # 3. The folder Netlify should actually serve
-  # Note: The Next.js Runtime plugin usually handles this, 
-  # but setting it explicitly helps debugging.
   publish = ".next"
 
 [context.production.environment]
-  # 4. Next.js 16 requires Node 20+
   NODE_VERSION = "20"
-  
-  # 5. Ensure we use the exact API URL for the pilot
-  NEXT_PUBLIC_API_URL = "http://api.invariantprotocol.com:3000"
+  # We point the app to ITSELF (relative path)
+  # This tricks the browser into thinking it's secure
+  NEXT_PUBLIC_API_URL = "/api-proxy" 
 
 [[plugins]]
-  # 6. Critical: The Adapter that makes Next.js work on Netlify
   package = "@netlify/plugin-nextjs"
+
+# THE MAGIC TRICK:
+# This tells Netlify: "When someone hits /api-proxy, send them to the Raw IP"
+[[redirects]]
+  from = "/api-proxy/*"
+  to = "http://16.171.151.222:3000/:splat"
+  status = 200
+  force = true
