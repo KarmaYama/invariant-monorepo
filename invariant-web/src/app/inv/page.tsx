@@ -3,12 +3,14 @@
 import { motion } from "framer-motion";
 import { ArrowLeft, ShieldCheck, Clock, Award, Scale } from "lucide-react";
 import Link from "next/link";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function InvToken() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black">
-      <Nav />
-      
+      <Header />
+
       <main className="max-w-4xl mx-auto pt-32 pb-24 px-6">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -67,6 +69,7 @@ export default function InvToken() {
           </blockquote>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

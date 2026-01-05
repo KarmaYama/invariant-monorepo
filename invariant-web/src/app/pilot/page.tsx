@@ -5,21 +5,14 @@ import {
   Download, ShieldCheck, BatteryWarning, Signal, CheckCircle2, 
   Smartphone, AlertTriangle, ArrowRight, Globe, Bot, Fingerprint, Hash 
 } from "lucide-react";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function PilotGuide() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black">
       
-      {/* NAV */}
-      <nav className="fixed top-0 w-full bg-[#050505]/95 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <span className="font-mono text-sm tracking-widest">INVARIANT GENESIS</span>
-        </Link>
-        <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 rounded-full bg-[#00FFC2] animate-pulse"></div>
-          <span className="text-xs font-mono text-[#00FFC2] tracking-widest">TESTNET ACTIVE</span>
-        </div>
-      </nav>
+      <Header />
 
       <main className="max-w-4xl mx-auto pt-32 pb-24 px-6">
         
@@ -168,6 +161,7 @@ export default function PilotGuide() {
         </div>
 
       </main>
+      <Footer />
     </div>
   );
 }

@@ -2,18 +2,14 @@
 
 import Link from "next/link";
 import { ArrowLeft, Mail, LifeBuoy, Building2, ShieldAlert } from "lucide-react";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function Contact() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black flex flex-col">
       
-      {/* NAV */}
-      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <ArrowLeft size={18} />
-          <span className="text-sm font-mono tracking-widest">RETURN</span>
-        </Link>
-      </nav>
+      <Header />
 
       <main className="grow pt-32 pb-24 px-6 max-w-5xl mx-auto w-full">
         
@@ -97,6 +93,7 @@ export default function Contact() {
         </div>
 
       </main>
+      <Footer />
     </div>
   );
 }

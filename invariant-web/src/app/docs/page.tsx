@@ -6,6 +6,7 @@ import {
   ArrowLeft, Copy, Terminal, Shield, Code2, CheckCircle2, 
   Cpu, Smartphone, Server, AlertTriangle, Info, BookOpen 
 } from "lucide-react";
+import { Header } from "@/components/Header";
 
 // --- NAVIGATION CONFIGURATION ---
 const SECTIONS = {
@@ -61,19 +62,7 @@ export default function Docs() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black">
       {/* NAV */}
-      <nav className="fixed top-0 w-full bg-[#050505]/95 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <ArrowLeft size={18} />
-          <span className="text-sm font-mono tracking-widest">RETURN TO DASHBOARD</span>
-        </Link>
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 px-3 py-1 bg-white/5 rounded border border-white/10">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#00FFC2]"></div>
-            <span className="text-xs font-mono text-[#00FFC2] tracking-widest">API v1</span>
-          </div>
-          <span className="text-xs font-mono text-white/40 tracking-widest">SDK v1.0.4</span>
-        </div>
-      </nav>
+      <Header />
 
       <main className="flex pt-16 min-h-screen max-w-7xl mx-auto">
         

@@ -2,17 +2,13 @@
 
 import Link from "next/link";
 import { ArrowLeft, Github, Linkedin, Mail } from "lucide-react";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 export default function About() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#00FFC2] selection:text-black">
-      {/* NAV */}
-      <nav className="fixed top-0 w-full bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 px-6 h-16 flex items-center">
-        <Link href="/" className="group flex items-center space-x-2 text-white/60 hover:text-white transition-colors">
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          <span className="text-sm font-mono tracking-widest">RETURN</span>
-        </Link>
-      </nav>
+      <Header />
 
       <main className="max-w-5xl mx-auto pt-40 px-6 pb-24">
         
@@ -69,6 +65,7 @@ export default function About() {
         </div>
 
       </main>
+      <Footer />
     </div>
   );
 }
