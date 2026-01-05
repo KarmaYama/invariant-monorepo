@@ -50,6 +50,7 @@ export default function PilotGuide() {
           <h2 className="text-3xl font-serif text-white mb-4">Install the Pilot Node</h2>
           <p className="text-white/60 mb-8 max-w-lg mx-auto">
             Quick setup: install the APK, authenticate once, and leave it installed for 14 days. We only collect attestation certificates — no names or contacts.
+            ⚠️ UPDATE INSTRUCTION: When installing the new version, do NOT uninstall the old one. Just click the link and install it over the top. If you delete the app, you kill your node and lose your streak.
           </p>
           
           <div className="flex flex-col items-center gap-6">
