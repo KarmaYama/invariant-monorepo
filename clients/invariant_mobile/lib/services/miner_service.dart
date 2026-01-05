@@ -1,10 +1,11 @@
+// clients/invariant_mobile/lib/services/miner_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:workmanager/workmanager.dart';
 import '../api_client.dart';
 import '../utils/time_helper.dart';
-import '../utils/genesis_logic.dart'; // IMPORT THIS
+import '../utils/genesis_logic.dart'; 
 import 'notification_manager.dart'; 
 
 const String kHeartbeatTask = "invariant_heartbeat";
@@ -41,19 +42,19 @@ void callbackDispatcher() {
         // 1. REAPER: Reset the Dead Man's Switch to +5 hours
         await notifs.scheduleReaperWarning();
 
-        // 2. DAILY BRIEF: Check if we completed a full "Day" (6 cycles)
+        // 2. DAILY BRIEF: Check status and notify if milestone reached
         try {
           final status = await client.getIdentityStatus(identityId);
           if (status != null) {
             final streak = int.tryParse((status['streak'] ?? '0').toString()) ?? 0;
             
-            // LOGIC: Only show brief every 6 cycles (approx 24h)
-            // or if it's the very first cycle (to confirm it works)
-            if (streak > 0 && streak % GenesisLogic.cyclesPerDay == 0) {
+            // UPDATED LOGIC: 
+            // Notify on the VERY FIRST success (streak=1) so they know it works.
+            // Then notify every 24h (streak % 6 == 0).
+            if (streak == 1 || (streak > 0 && streak % GenesisLogic.cyclesPerDay == 0)) {
               
-              // We need total network nodes for the brief (Optional, defaulting to '20+' if not in response)
-              // Assuming API returns it or we fake it for the brief for now
-              int totalNodes = 20; // Default placeholder for the brief
+              // Mock total nodes if API doesn't return it yet
+              int totalNodes = 20; 
               
               await notifs.showMissionBrief(streak, totalNodes);
             }

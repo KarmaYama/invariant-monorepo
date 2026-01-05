@@ -1,6 +1,6 @@
 name: invariant_mobile
 description: "The Invisible Identity Mobile Client"
-version: 1.0.1+2
+version: 1.0.4+3
 publish_to: none
 
 environment:

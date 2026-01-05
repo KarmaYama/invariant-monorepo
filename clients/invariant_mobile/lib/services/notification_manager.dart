@@ -1,7 +1,7 @@
+// clients/invariant_mobile/lib/services/notification_manager.dart
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import '../utils/genesis_logic.dart';
 
@@ -12,9 +12,15 @@ class NotificationManager {
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 
-  static const String _channelIdHigh = 'invariant_high_alert';
-  static const String _channelIdLow = 'invariant_mission_brief';
+  // CHANNELS
+  static const String _channelIdHigh = 'invariant_critical';
+  static const String _channelIdLow = 'invariant_updates';
+  static const String _channelIdNudge = 'invariant_maintenance'; // NEW
+
+  // ID MAP
   static const int _idReaper = 666;
+  static const int _idSafetyNet = 777; // NEW: The "Wake Up" nudge
+  static const int _idPromotion = 888; // NEW: Rank up
   static const int _idDaily = 101;
 
   Future<void> initialize() async {
@@ -28,55 +34,60 @@ class NotificationManager {
   }
 
   Future<void> _createNotificationChannels() async {
-    // 1. REAPER CHANNEL (Max Importance, Red LED)
+    // 1. CRITICAL (Reaper)
     const AndroidNotificationChannel highChannel = AndroidNotificationChannel(
-      _channelIdHigh,
-      'Critical Alerts',
-      description: 'Notifications when node stability is at risk.',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-      ledColor: Color(0xFFFF0000),
-      enableLights: true,
+      _channelIdHigh, 'Critical Alerts',
+      description: 'Notifications when identity revocation is imminent.',
+      importance: Importance.max, playSound: true, enableVibration: true,
+      ledColor: Color(0xFFFF0000), enableLights: true,
     );
 
-    // 2. BRIEF CHANNEL (Low Importance, Silent)
+    // 2. MAINTENANCE (Safety Net)
+    const AndroidNotificationChannel nudgeChannel = AndroidNotificationChannel(
+      _channelIdNudge, 'Signal Maintenance',
+      description: 'Alerts when background synchronization is delayed.',
+      importance: Importance.high, playSound: true, enableVibration: true,
+    );
+
+    // 3. UPDATES (Promotions/Daily)
     const AndroidNotificationChannel lowChannel = AndroidNotificationChannel(
-      _channelIdLow,
-      'Mission Briefs',
-      description: 'Daily status updates.',
-      importance: Importance.low,
-      playSound: false,
-      enableVibration: false,
+      _channelIdLow, 'Mission Updates',
+      description: 'Rank upgrades and daily summaries.',
+      importance: Importance.defaultImportance,
     );
 
     var androidPlatform = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlatform?.createNotificationChannel(highChannel);
-    await androidPlatform?.createNotificationChannel(lowChannel);
+    
+    if (androidPlatform != null) {
+      await androidPlatform.createNotificationChannel(highChannel);
+      await androidPlatform.createNotificationChannel(nudgeChannel);
+      await androidPlatform.createNotificationChannel(lowChannel);
+    }
   }
 
-  /// THE REAPER WARNING
-  /// "If your server doesn't see a heartbeat for 5 hours... send a high-priority push"
-  Future<void> scheduleReaperWarning() async {
-    await _notifications.cancel(_idReaper); 
+  // --- LOGIC ---
 
-    // Schedule: +5 Hours from now
-    final scheduledDate = tz.TZDateTime.now(tz.local).add(const Duration(hours: 5));
+  /// THE SAFETY NET (Smart Nudge)
+  /// Schedules a "Please Open App" notification for 3h 50m from now.
+  /// If the miner runs successfully before then, this gets cancelled/overwritten.
+  Future<void> scheduleSafetyNet() async {
+    await _notifications.cancel(_idSafetyNet); // Clear previous
+
+    // Schedule for just before the 4-hour window closes
+    final scheduledDate = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 230)); // 3h 50m
 
     await _notifications.zonedSchedule(
-      _idReaper,
-      '🚨 IDENTITY AT RISK', // Exact copy from plan
-      'Your node has missed a cycle. Open Invariant immediately to prevent revocation.',
+      _idSafetyNet,
+      '⚠️ SIGNAL DEGRADING',
+      'Background sync failed. Tap to manually verify and save your streak.',
       scheduledDate,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          _channelIdHigh,
-          'Critical Alerts',
-          importance: Importance.max,
+          _channelIdNudge, 'Signal Maintenance',
+          importance: Importance.high,
           priority: Priority.high,
-          color: Color(0xFFFF0000),
-          fullScreenIntent: true, // Wake up screen
+          color: Color(0xFF00FFC2), // Cyan for "Fix It"
           visibility: NotificationVisibility.public,
         ),
       ),
@@ -84,32 +95,63 @@ class NotificationManager {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
-    debugPrint("💀 Reaper Warning Armed: +5 Hours");
   }
 
-  /// THE DAILY BRIEF
-  /// "Every morning, send a summary"
-  Future<void> showMissionBrief(int streak, int totalNetworkNodes) async {
-    String title = "Genesis Update";
-    String body = GenesisLogic.getDailyBriefBody(streak, totalNetworkNodes);
-
+  /// THE PROMOTION (Dopamine)
+  /// Fires immediately when a user hits a new tier (Day 3, 7, 10, 14)
+  Future<void> showPromotion(String newTier) async {
     await _notifications.show(
-      _idDaily,
-      title,
-      body,
+      _idPromotion,
+      '🎖️ PROMOTION: $newTier',
+      'You have reached a new security clearance level. The network acknowledges your consistency.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          _channelIdLow,
-          'Mission Briefs',
-          importance: Importance.low,
-          priority: Priority.low,
-          showWhen: true,
+          _channelIdLow, 'Mission Updates',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          color: Color(0xFF00FFC2),
         ),
       ),
     );
   }
 
-  Future<void> cancelReaper() async {
+  /// THE DAILY BRIEF
+  Future<void> showMissionBrief(int streak, int totalNetworkNodes) async {
+    String body = GenesisLogic.getDailyBriefBody(streak, totalNetworkNodes);
+    await _notifications.show(
+      _idDaily, 'Genesis Update', body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelIdLow, 'Mission Updates',
+          importance: Importance.low, priority: Priority.low,
+        ),
+      ),
+    );
+  }
+
+  /// THE REAPER (Final Warning - 5 Hours)
+  Future<void> scheduleReaperWarning() async {
     await _notifications.cancel(_idReaper);
+    final scheduledDate = tz.TZDateTime.now(tz.local).add(const Duration(hours: 5));
+
+    await _notifications.zonedSchedule(
+      _idReaper, '🚨 IDENTITY AT RISK',
+      'You have missed a cycle. Revocation imminent.',
+      scheduledDate,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelIdHigh, 'Critical Alerts',
+          importance: Importance.max, priority: Priority.high,
+          fullScreenIntent: true,
+          color: Color(0xFFFF0000),
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> cancelAll() async {
+    await _notifications.cancelAll();
   }
 }
