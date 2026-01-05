@@ -4,42 +4,62 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// 1. LOAD KEYSTORE PROPERTIES
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace = "com.invariant.protocol.invariant_mobile"
+    namespace = "com.invariant.protocol" // Must match AndroidManifest package
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        // Enable Desugaring for modern Time APIs on older Androids
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        // Target JVM 17 to match compileOptions
-        jvmTarget = "17"
+        jvmTarget = "1.8"
     }
 
     defaultConfig {
-        applicationId = "com.invariant.protocol.invariant_mobile"
+        // Ensure this matches what you want your users to see
+        applicationId = "com.invariant.protocol" 
         
-        // Min SDK 21 required for flutter_local_notifications
+        // Min SDK 23 is recommended for hardware KeyStore access (Android 6.0)
         minSdk = flutter.minSdkVersion 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        
-        // MultiDex required for Desugaring
         multiDexEnabled = true
     }
 
+    // 2. DEFINE SIGNING CONFIG
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+            storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
+
     buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-            // Shrink resources for smaller APK
-            isMinifyEnabled = true
-            isShrinkResources = true
+        getByName("release") {
+            // 3. APPLY SIGNING CONFIG
+            signingConfig = signingConfigs.getByName("release")
+            
+            // 4. DISABLE SHRINKING (Critical for MethodChannels/JNI stability)
+            isMinifyEnabled = false
+            isShrinkResources = false
+            
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -53,6 +73,5 @@ flutter {
 }
 
 dependencies {
-    // Desugaring Library
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
