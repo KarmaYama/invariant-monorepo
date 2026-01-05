@@ -35,7 +35,7 @@ export default function About() {
             </p>
             <div className="flex space-x-6">
               <SocialLink icon={<Github size={20} />} label="GITHUB" href="https://github.com/KarmaYama" />
-              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:alex@invariantprotocol.com" />
+              <SocialLink icon={<Mail size={20} />} label="CONTACT" href="mailto:alex.matarirano@invariantprotocol.com" />
             </div>
           </div>
 

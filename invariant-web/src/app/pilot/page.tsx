@@ -155,8 +155,8 @@ export default function PilotGuide() {
         {/* FOOTER */}
         <div className="mt-24 text-center border-t border-white/10 pt-12">
           <p className="text-white/30 font-mono text-xs mb-4">ISSUES? DIRECT LINE TO THE ARCHITECT</p>
-          <a href="mailto:alex@invariantprotocol.com" className="text-[#00FFC2] border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 transition-all">
-            alex@invariantprotocol.com
+          <a href="mailto:alex.matarirano@invariantprotocol.com" className="text-[#00FFC2] border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 transition-all">
+            alex.matarirano@invariantprotocol.com
           </a>
         </div>
 

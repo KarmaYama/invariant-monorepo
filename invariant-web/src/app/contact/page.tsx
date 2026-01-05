@@ -26,7 +26,7 @@ export default function Contact() {
         <div className="grid md:grid-cols-2 gap-6 mb-24">
           
           {/* 1. COMMERCIAL / PARTNERSHIPS */}
-          <a href="mailto:partners@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-[#00FFC2]/50 transition-all">
+          <a href="mailto:alex.matarirano@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-[#00FFC2]/50 transition-all">
             <div className="flex justify-between items-start mb-6">
               <Building2 className="text-[#00FFC2]" size={28} />
               <span className="text-xs font-mono text-white/30 uppercase tracking-widest group-hover:text-[#00FFC2] transition-colors">Commercial</span>
@@ -39,7 +39,7 @@ export default function Contact() {
           </a>
 
           {/* 2. PILOT SUPPORT */}
-          <a href="mailto:pilot@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+          <a href="mailto:alex.matarirano@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
             <div className="flex justify-between items-start mb-6">
               <LifeBuoy className="text-white/60 group-hover:text-white transition-colors" size={28} />
               <span className="text-xs font-mono text-white/30 uppercase tracking-widest">Technical</span>
@@ -52,7 +52,7 @@ export default function Contact() {
           </a>
 
           {/* 3. SECURITY DISCLOSURE */}
-          <a href="mailto:security@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+          <a href="mailto:alex.matarirano@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
             <div className="flex justify-between items-start mb-6">
               <ShieldAlert className="text-amber-500" size={28} />
               <span className="text-xs font-mono text-white/30 uppercase tracking-widest">Security</span>
@@ -65,7 +65,7 @@ export default function Contact() {
           </a>
 
           {/* 4. GENERAL */}
-          <a href="mailto:hello@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
+          <a href="mailto:alex.matarirano@invariantprotocol.com" className="group p-8 border border-white/10 bg-white/5 rounded hover:border-white/30 transition-all">
             <div className="flex justify-between items-start mb-6">
               <Mail className="text-white/60" size={28} />
               <span className="text-xs font-mono text-white/30 uppercase tracking-widest">General</span>
