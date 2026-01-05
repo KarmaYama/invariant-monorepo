@@ -69,7 +69,7 @@ We are currently in **Incentivized Testnet**. Early adopters help us stress-test
 1. **Download the Client:** Get the Invariant mobile app (APK available in Releases).
 2. **Initialize Genesis:** Open the app and authenticate with your device's biometrics to generate your key.
 3. **Stay Live:** Keep the app installed. Open it occasionally to sync your score.
-4. **Join the Community:** Give feedback on our [Discord](https://www.google.com/search?q=https://discord.gg/invariant).
+4. **Join the Community:** Give feedback on our [Discord](https://discord.gg/ejY6tDCx).
 
 ---
 
