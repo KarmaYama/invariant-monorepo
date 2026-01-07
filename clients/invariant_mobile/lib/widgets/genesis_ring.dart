@@ -3,12 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class GenesisRing extends StatefulWidget {
-  final int streak;
-  // Hardcoded as per your design, but kept public in case logic changes
+  final int continuity; // Lifetime Score (The Ring Progress)
+  final int streak;     // Current Streak (Visual flair/Unlock status)
+  
+  // 14 Days * 6 Cycles = 84 Total Cycles for Genesis
   final int totalCycles = 84; 
+  
   final bool isSignaling;
 
-  const GenesisRing({super.key, required this.streak, this.isSignaling = false});
+  const GenesisRing({
+    super.key, 
+    required this.continuity, 
+    required this.streak,
+    this.isSignaling = false
+  });
 
   @override
   State<GenesisRing> createState() => _GenesisRingState();
@@ -21,18 +29,18 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // 1. Slow HUD Rotation
+    // 1. Slow HUD Rotation (Ambient)
     _rotationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 20),
+      vsync: this, 
+      duration: const Duration(seconds: 20)
     )..repeat();
 
     // 2. "Breathing" Physics (Idle Pulse)
     _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-      lowerBound: 0.0,
-      upperBound: 1.0,
+      vsync: this, 
+      duration: const Duration(seconds: 3), 
+      lowerBound: 0.0, 
+      upperBound: 1.0
     )..repeat(reverse: true);
   }
 
@@ -47,7 +55,10 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const accent = Color(0xFF00FFC2);
-    final progress = (widget.streak / widget.totalCycles).clamp(0.0, 1.0);
+    
+    // ⚡ LOGIC FIX: Progress is based on CONTINUITY (Lifetime Score).
+    // This ensures the ring is "Stable" and doesn't crash to 0 on a missed cycle.
+    final double progress = (widget.continuity / widget.totalCycles).clamp(0.0, 1.0);
 
     return SizedBox(
       width: 300,
@@ -57,16 +68,16 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
         children: [
           // 1. Ambient Depth Halo
           Container(
-            width: 180,
+            width: 180, 
             height: 180,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: accent.withValues(alpha: isDark ? 0.08 : 0.04),
-                  blurRadius: 50,
-                  spreadRadius: 10,
-                ),
+                  color: accent.withValues(alpha: isDark ? 0.08 : 0.04), 
+                  blurRadius: 50, 
+                  spreadRadius: 10
+                )
               ],
             ),
           ),
@@ -75,12 +86,12 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
           RotationTransition(
             turns: _rotationController,
             child: CustomPaint(
-              size: const Size(300, 300),
-              painter: _HudPainter(color: isDark ? Colors.white12 : Colors.black12),
+              size: const Size(300, 300), 
+              painter: _HudPainter(color: isDark ? Colors.white12 : Colors.black12)
             ),
           ),
 
-          // 3. Pulsing Progress Track
+          // 3. Pulsing Progress Track (The visual representation of Stability)
           AnimatedBuilder(
             animation: _pulseController,
             builder: (context, child) {
@@ -92,11 +103,11 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
                   return CustomPaint(
                     size: const Size(240, 240),
                     painter: _TrackPainter(
-                      progress: value,
-                      color: accent,
-                      isDark: isDark,
-                      isSignaling: widget.isSignaling,
-                      pulse: _pulseController.value, // Pass breath value
+                      progress: value, 
+                      color: accent, 
+                      isDark: isDark, 
+                      isSignaling: widget.isSignaling, 
+                      pulse: _pulseController.value
                     ),
                   );
                 },
@@ -104,7 +115,7 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
             },
           ),
 
-          // 4. Central Data
+          // 4. Central Data Display
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -112,21 +123,26 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
                 scale: widget.isSignaling ? 1.1 : 1.0,
                 duration: const Duration(milliseconds: 300),
                 child: Icon(
-                  widget.streak >= widget.totalCycles ? Icons.verified : Icons.fingerprint, 
+                  // Show Verified if Lifetime Target reached (84 cycles)
+                  widget.continuity >= widget.totalCycles ? Icons.verified : Icons.fingerprint, 
                   size: 44, 
                   color: widget.isSignaling ? accent : (isDark ? Colors.white : Colors.black87)
                 ),
               ),
               const SizedBox(height: 12),
+              
+              // Big Percentage (Stability Index)
               Text(
                 "${(progress * 100).toStringAsFixed(1)}%",
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 42, 
                   fontWeight: FontWeight.w800, 
-                  letterSpacing: -2,
-                  color: isDark ? Colors.white : Colors.black87,
+                  letterSpacing: -2, 
+                  color: isDark ? Colors.white : Colors.black87
                 ),
               ),
+              
+              // Small Label
               Text(
                 widget.isSignaling ? "UPLOADING..." : "STABILITY INDEX",
                 style: GoogleFonts.inter(
@@ -173,7 +189,6 @@ class _TrackPainter extends CustomPainter {
     canvas.drawCircle(center, radius, bgPaint);
 
     // Active Progress Arc (Breathing Thickness)
-    // If signaling, stay thick. If idle, pulse slightly between 14.0 and 15.0
     final activeWidth = isSignaling ? 16.0 : (14.0 + (pulse * 1.5));
     
     final paint = Paint()

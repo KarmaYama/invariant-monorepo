@@ -10,6 +10,7 @@ import '../utils/genesis_logic.dart';
 import '../widgets/genesis_ring.dart'; 
 import 'leaderboard_screen.dart';
 import '../theme_manager.dart';
+import '../services/update_service.dart';
 
 class IdentityCard extends StatefulWidget {
   final String identityId;
@@ -37,7 +38,12 @@ class _IdentityCardState extends State<IdentityCard> {
     _fetchData();
     _startCountdown();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _fetchData());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkUsernameStatus());
+    
+    // Check for updates after the UI builds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkUsernameStatus();
+      UpdateService().checkForUpdate(context);
+    });
   }
 
   Future<void> _checkSystemHealth() async {
@@ -138,14 +144,17 @@ class _IdentityCardState extends State<IdentityCard> {
     final theme = context.watch<ThemeController>();
     final isDark = theme.isDark;
     
+    // ⚡ DECOUPLED METRICS:
+    // 1. Streak = Volatile (Can reset to 1)
     final int streak = int.tryParse((_identityData?['streak'] ?? '0').toString()) ?? 0;
-    // TIER LOGIC (Time-based)
+    // 2. Continuity/Score = Permanent (Lifetime Stability)
+    final int continuity = int.tryParse((_identityData?['score'] ?? '0').toString()) ?? 0;
+    
+    // TIER LOGIC (Uses Streak for daily titles)
     final String timeTier = GenesisLogic.getTitle(streak); 
-    // HARDWARE LOGIC (Attestation-based)
+    
     final String hardwareTier = (_identityData?['tier'] ?? 'HARDWARE').toString().toUpperCase();
     final String? username = _identityData?['username'];
-
-    // [FIX] Removed unused 'isGenesis' variable to satisfy linter
 
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.white38 : Colors.black38;
@@ -175,10 +184,8 @@ class _IdentityCardState extends State<IdentityCard> {
                               children: [
                                 Row(
                                   children: [
-                                    // 2. HARDWARE BADGE (Cyan)
                                     _buildStatusBadge(hardwareTier, const Color(0xFF00FFC2)),
                                     const SizedBox(width: 8),
-                                    // 3. TIME TIER BADGE (Grey/Subtle)
                                     _buildStatusBadge(timeTier, subTextColor),
                                   ],
                                 ),
@@ -210,8 +217,14 @@ class _IdentityCardState extends State<IdentityCard> {
                             const Spacer(),
 
                             // --- HERO RING ---
-                            // [FIX] Removed 'totalCycles' argument to match user's class
-                            GenesisRing(streak: streak, isSignaling: _isSignaling),
+                            // Pass both metrics:
+                            // continuity -> fills the ring (Stability)
+                            // streak -> passed for potential flair
+                            GenesisRing(
+                              continuity: continuity, 
+                              streak: streak, 
+                              isSignaling: _isSignaling
+                            ),
 
                             const Spacer(),
 
@@ -226,8 +239,10 @@ class _IdentityCardState extends State<IdentityCard> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
-                                  _buildStat("CONTINUITY", "$streak", textColor, subTextColor),
+                                  // Show the VOLATILE streak here
+                                  _buildStat("CURRENT STREAK", "$streak", textColor, subTextColor),
                                   Container(width: 1, height: 30, color: cardBorder),
+                                  // Show the Mining Timer
                                   _buildStat("PULSE", _nextPulse, textColor, subTextColor),
                                 ],
                               ),
