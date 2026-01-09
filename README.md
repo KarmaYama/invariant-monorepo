@@ -81,7 +81,7 @@ Invariant is not a financial instrument—it is a **mathematically auditable pro
 
 **Stand on Invariant.**
 
-[Download Release] | [Read Whitepaper] | [View Source Code]
+[Download Release](https://invariantprotocol.com/pilot) | [Read Whitepaper](https://invariantprotocol.com/whitepaper) | [View Source Code](https://github.com/KarmaYama/invariant-monorepo/tree/main/crates/invariant_engine)
 
 ---
 
