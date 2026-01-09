@@ -1,104 +1,88 @@
 # Invariant Protocol
 
-### The Anchor for the Artificial Age.
+### The Anchor for the Digital Age
 
 ---
 
-### The Internet has lost its "Proof of Personhood."
+## The Problem: Lost Proof of Personhood
 
-In an era where Artificial Intelligence can simulate human language, behavior, and creativity, the assumption that **"One Account = One Human"** is dead. The digital economy is flooding with bots, creating a crisis of trust that biometrics and passwords can no longer solve without invading your privacy.
+With AI generating realistic human behavior, the assumption **"one account = one human"** is broken. Bots and automated accounts flood platforms, undermining trust. Biometrics and passwords alone are no longer enough without compromising privacy.
 
-**Invariant** is the solution. It is not a social network. It is not a wallet. It is infrastructure.
-
-Invariant establishes a **Proof of Device** network. By anchoring your digital identity to the physical security chip inside your smartphone, we create a mathematical proof that you are real, unique, and persistent—without ever knowing who you are.
+**Invariant** is not a social network or a wallet—it is infrastructure. It provides **hardware-backed proof of existence**, establishing a cryptographically verifiable link between a human and their physical device.
 
 ---
 
-## ⚡ Why Invariant?
+## ⚡ Why Invariant Matters
 
-We believe identity should be **invisible**, **private**, and **valuable**.
+Invariant ensures that digital identity is **private, persistent, and auditable**.
 
-### 1. Hardware, Not Heuristics
+1. **Hardware-Backed Verification**  
+   - Verifies the device’s Trusted Execution Environment (TEE) or Secure Element (StrongBox).  
+   - Prevents emulator, rooted device, or server-farm abuse.  
 
-We don't analyze your behavior. We don't scan your iris. We communicate directly with the **Secure Enclave** (TEE) inside your phone—the same chip that secures your banking apps. If you have a physical device, you have a verified identity.
+2. **Minimal Interaction**  
+   - Generate your identity with a single tap.  
+   - Continuity scores update via background heartbeats with negligible battery/data use.  
 
-### 2. Zero-Load Interaction
-
-Invariant respects your time. There are no daily tasks, no ads, and no "mining" games.
-
-* **Genesis:** You tap once to generate your hardware-bound key.
-* **Heartbeat:** The app proves your existence in the background via a low-data pulse.
-* **That's it.** You are anchoring the network just by existing.
-
-### 3. Absolute Privacy
-
-Your biometrics (FaceID/Fingerprint) never leave your device. The Invariant Protocol verifies **hardware integrity**, not personal identity. We know *that* you are human, but we do not know *which* human you are.
+3. **Absolute Privacy**  
+   - No biometrics or personal data leave the device.  
+   - The network validates **existence**, not identity.
 
 ---
 
 ## 🧬 How It Works
 
-Invariant turns your smartphone into a **Hardware Anchor**.
+1. **Attestation:** Device generates a cryptographic certificate chain signed by the manufacturer.  
+2. **Binding:** The chain is verified against the global hardware root of trust. A unique ID is minted.  
+3. **Persistence:** Periodic encrypted heartbeats maintain a **Continuity Score**, reflecting verified presence over time.
 
-1. **Attestation (The Handshake):** When you join, your phone generates a cryptographic certificate chain signed by the manufacturer (Google/Apple).
-2. **Binding (The Lock):** The network verifies this certificate against the Global Hardware Root of Trust. If valid, a unique ID is minted.
-3. **Persistence (The Pulse):** Your device sends a periodic, encrypted "heartbeat" to the network. This builds your **Continuity Score**—a measure of how long you have been a verified actor in the ecosystem.
-
-> **Note:** This process consumes negligible battery and data (less than a text message per day).
+> Battery and data impact is minimal (<1 text message/day).
 
 ---
 
-## 📱 The User Experience
+## 📱 User Experience
 
-We built Invariant to be "Calm Software." It does not beg for your attention.
-
-* **The Interface:** A minimalist dashboard showing your Anchor Status and Continuity Score.
-* **The Tiers:**
-* **Tier 1 (Titanium):** Devices with StrongBox/Secure Element (High Security).
-* **Tier 2 (Steel):** Devices with Standard TEE (Standard Security).
-
-
-* **The Utility:** In the future, your Invariant Identity will act as a "Fast Pass" for the internet—bypassing CAPTCHAs, granting access to exclusive platforms, and verifying you as a human in a world of AI.
+- **Dashboard:** Displays Anchor Status and Continuity Score.  
+- **Security Tiers:**  
+  - **Titanium:** StrongBox/Secure Element devices (high security).  
+  - **Steel:** Standard TEE devices (standard security).  
+- **Future Utility:** Verified identities enable “bot-free” login, CAPTCHA bypass, and access to trusted services.
 
 ---
 
 ## 🚀 Getting Started (Testnet V1)
 
-We are currently in **Incentivized Testnet**. Early adopters help us stress-test the Sybil-resistance of the network.
-
-1. **Download the Client:** Get the Invariant mobile app (APK available in Releases).
-2. **Initialize Genesis:** Open the app and authenticate with your device's biometrics to generate your key.
-3. **Stay Live:** Keep the app installed. Open it occasionally to sync your score.
-4. **Join the Community:** Give feedback on our [Discord](https://discord.gg/ejY6tDCx).
+1. Download the mobile client (APK in Releases).  
+2. Generate your hardware-bound key using your device.  
+3. Keep the app installed and periodically open to sync your score.  
+4. Join [Discord](https://discord.gg/ejY6tDCx) for early feedback.
 
 ---
 
 ## 🛡️ Security & Integrity
 
-Invariant is built on the philosophy of **"Don't Trust, Verify."**
-
-* **Open Source:** Our core logic is public.
-* **Non-Custodial:** We cannot delete your identity. We cannot access your private key.
-* **Anti-Emulator:** Our server enforces strict attestation rules. Emulators, rooted devices, and server farms are mathematically rejected.
+- **Open Source:** Core logic is publicly auditable.  
+- **Non-Custodial:** Private keys never leave the device.  
+- **Anti-Emulator:** Only physical, uncompromised devices are accepted.
 
 ---
 
-## 🗺️ The Roadmap
+## 🗺️ Roadmap
 
-* **Phase 1 (Current):** Infrastructure Stress Test. Validating the "Cost of Forgery" economic model.
-* **Phase 2:** Partner Integrations. Allowing third-party dApps to use Invariant for "Bot-Free" login.
-* **Phase 3:** Mainnet Launch. Converting Continuity Scores into the decentralized governance layer.
+1. **Phase 1 (Current):** Testnet & stress-test Sybil-resistance.  
+2. **Phase 2:** Partner integrations for bot-free services.  
+3. **Phase 3:** Mainnet & decentralized governance layer leveraging Continuity Scores.
 
 ---
 
-### A Note on value
+## A Note on Value
 
-Invariant is not a "get rich quick" scheme. It is a **"prove you exist"** mechanism. By participating, you are helping build the guardrails for the future of the internet.
+Invariant is not a financial instrument—it is a **mathematically auditable proof of human existence**. Early participants help shape the foundation of a trustworthy digital ecosystem.
 
 **Stand on Invariant.**
 
-[Download Latest Release] | [Read the Whitepaper] | [View Source Code]
+[Download Release] | [Read Whitepaper] | [View Source Code]
 
 ---
 
-*Copyright © 2025 Invariant Protocol. Built with Rust, Flutter, and Physics.*
+*Copyright © 2025 Invariant Protocol. Built with Rust, Flutter, and Cryptography.*
