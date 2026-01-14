@@ -4,7 +4,6 @@
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use axum::{Extension, Json, http::StatusCode, response::IntoResponse};
@@ -16,39 +15,36 @@ use tracing::{error, info, warn, instrument};
 use rand::{Rng, thread_rng};
 use redis::AsyncCommands; 
 
-// 🛡️ SECURITY: In-Memory Rate Limiter
-// We use a simple Mutex map to track IPs. In a clustered deployment, 
-// you would move this logic to Redis, but for a single node, this is faster.
-use std::sync::Mutex;
-use std::collections::HashMap;
-use std::time::{Instant, Duration};
-use once_cell::sync::Lazy;
-
 const NONCE_TTL_SECONDS: u64 = 300; 
 const CONFIG_KEY_PAUSED: &str = "invariant:config:genesis_paused";
+const MAX_GENESIS_PER_HOUR: i64 = 100;
 
-// Rate Limit: 100 requests per IP per hour.
-static RATE_LIMITER: Lazy<Mutex<HashMap<String, (u32, Instant)>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-
-fn check_rate_limit(ip: String) -> bool {
-    let mut store = RATE_LIMITER.lock().unwrap();
+/// 🛡️ REDIS RATE LIMITER
+/// Uses the "Fixed Window" algorithm with atomic increments.
+/// Returns TRUE if the request is allowed, FALSE if blocked.
+async fn check_rate_limit(redis: &mut redis::aio::MultiplexedConnection, ip: &str) -> bool {
+    let key = format!("rate_limit:genesis:{}", ip);
     
-    let (count, last_reset) = store.entry(ip.clone()).or_insert((0, Instant::now()));
+    // 1. Atomic INCR
+    let count: i64 = match redis.incr(&key, 1).await {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Rate limiter Redis error: {}", e);
+            return true; // Fail open (allow traffic) if Redis breaks
+        }
+    };
 
-    // Reset window every hour
-    if last_reset.elapsed() > Duration::from_secs(3600) {
-        *count = 0;
-        *last_reset = Instant::now();
+    // 2. Set Expiry on first request (start of window)
+    if count == 1 {
+        let _ = redis.expire::<&str, ()>(&key, 3600).await;
     }
 
-    if *count >= 100 { 
-        warn!("Rate Limit Exceeded for IP: {}", ip);
+    // 3. Check Limit
+    if count > MAX_GENESIS_PER_HOUR {
+        warn!("⛔ Rate Limit Exceeded for IP: {}", ip);
         return false;
     }
 
-    *count += 1;
     true
 }
 
@@ -58,13 +54,6 @@ pub async fn get_challenge_handler(
     Extension(state): Extension<SharedState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
-    
-    let ip = addr.ip().to_string();
-    if !check_rate_limit(ip) {
-        // 429 Too Many Requests - The "Bouncer" blocks the door.
-        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Rate limit exceeded. Try again later." })));
-    }
-
     let mut conn = match state.redis.get_multiplexed_async_connection().await {
         Ok(c) => c,
         Err(e) => {
@@ -73,12 +62,19 @@ pub async fn get_challenge_handler(
         }
     };
 
-    // Feature Flag Check
+    // 1. Check Rate Limit (Redis)
+    let ip = addr.ip().to_string();
+    if !check_rate_limit(&mut conn, &ip).await {
+        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Rate limit exceeded. Try again in 1 hour." })));
+    }
+
+    // 2. Feature Flag Check
     let is_paused: bool = conn.exists(CONFIG_KEY_PAUSED).await.unwrap_or(false);
     if is_paused {
         return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Genesis paused." })));
     }
 
+    // 3. Generate Nonce
     let (nonce_hex, redis_key) = {
         let mut rng = thread_rng();
         let mut nonce_bytes = [0u8; 32];

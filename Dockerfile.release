@@ -1,0 +1,28 @@
+# Dockerfile.release
+# 1. Build Stage (Chef optimizes caching)
+FROM lukemathwalker/cargo-chef:latest-rust-1.75 AS chef
+WORKDIR /app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching layer!
+RUN cargo chef cook --release --recipe-path recipe.json
+# Build application
+COPY . .
+RUN cargo build --release --bin invariant_server
+
+# 2. Runtime Stage
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
+# Install OpenSSL and CA certs (Required for Google Auth & Database)
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/invariant_server /usr/local/bin/
+# Copy migrations if you run them at startup (optional if using sqlx-cli in build)
+# COPY --from=builder /app/crates/invariant_server/migrations ./migrations
+
+CMD ["/usr/local/bin/invariant_server"]

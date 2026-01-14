@@ -1,9 +1,10 @@
+// clients/invariant_mobile/lib/screens/boot_loader.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/miner_service.dart';
 import '../api_client.dart'; 
 import 'identity_card.dart';
-import 'onboarding_screen.dart'; // <--- IMPORT THIS
+import 'onboarding_screen.dart';
 
 class BootLoader extends StatefulWidget {
   const BootLoader({super.key});
@@ -38,7 +39,12 @@ class _BootLoaderState extends State<BootLoader> {
 
       if (isValid) {
         // Happy Path -> Dashboard
-        MinerService.startMining();
+        // FIXED: Re-register alarms to heal "Force Stop" states
+        await MinerService.scheduleMiningCycle();
+        
+        // 🛡️ LINTER FIX: Check mounted before using context across async gap
+        if (!mounted) return;
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => IdentityCard(identityId: id)),
         );

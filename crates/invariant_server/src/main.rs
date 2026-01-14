@@ -4,12 +4,12 @@
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 mod db;
 mod state;
 mod handlers;
+mod services { pub mod push; }
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -40,6 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .with(tracing_subscriber::fmt::layer().event_format(log_format))
         .init();
+
+    // 1. Initialize FCM (Server-Driven Wake Up)
+    if let Err(e) = services::push::initialize().await {
+        tracing::error!("⚠️ Failed to initialize FCM: {}. Wake-up calls disabled.", e);
+    }
 
     // ⚡ PERFORMANCE TUNING
     // Max Connections: 75 allows more bots to queue.
@@ -84,22 +89,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         redis: redis_client,
     });
 
-    // Background Reaper (Isolated thread)
-    let reaper_storage = PostgresStorage::new(pool.clone());
+    // 2. Background Worker: Reaper + Wake Up Call (Isolated thread)
+    let worker_storage = PostgresStorage::new(pool.clone());
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(3600)); 
+        // Run every 15 minutes to catch late users efficiently
+        let mut interval = tokio::time::interval(Duration::from_secs(900)); 
         loop {
             interval.tick().await;
-            tracing::debug!("Running Reaper cycle...");
-            match reaper_storage.run_reaper().await {
-                Ok(count) => {
-                    if count > 0 { 
-                        tracing::info!(event = "reaper_run", dormant_count = count, "Reaper marked identities dormant"); 
+            
+            // A. Wake Up Call (Users > 24 hours late)
+            match worker_storage.get_late_fcm_tokens(24 * 60).await {
+                Ok(tokens) => {
+                    if !tokens.is_empty() {
+                        tracing::info!("🔔 Waking up {} late nodes...", tokens.len());
+                        for token in tokens {
+                            // Fire and forget push
+                            let _ = services::push::send_wake_up_call(&token).await;
+                        }
                     }
-                },
-                Err(e) => {
-                    tracing::error!(event = "reaper_fail", error = ?e, "Reaper cycle failed");
                 }
+                Err(e) => tracing::error!("Failed to fetch late tokens: {}", e),
+            }
+
+            // B. Reaper (Users > 30 days dormant)
+            // We run this every cycle, but it only touches ancient rows.
+            if let Err(e) = worker_storage.run_reaper().await {
+                tracing::error!("Reaper failed: {}", e);
             }
         }
     });

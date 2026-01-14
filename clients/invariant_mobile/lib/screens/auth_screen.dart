@@ -92,7 +92,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       
       if (identityId != null) {
         await _storage.write(key: 'identity_id', value: identityId);
-        MinerService.startMining(); 
+        
+        // FIXED: Replaced startMining() with the new Hydra scheduler
+        await MinerService.scheduleMiningCycle(); 
 
         if (mounted) {
           Navigator.of(context).pushReplacement(

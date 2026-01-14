@@ -1,3 +1,4 @@
+// clients/invariant_mobile/lib/api_client.dart
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -156,6 +157,29 @@ class InvariantClient {
     } catch (e) {
       debugPrint("Leaderboard Error: $e");
       return [];
+    }
+  }
+
+  /// [NEW] Syncs the FCM Push Token to the server so the Reaper can wake us up.
+  Future<void> updatePushToken(String uuid, String token) async {
+    final url = Uri.parse('$baseUrl/identity/push_token');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'identity_id': uuid,
+          'fcm_token': token,
+        }),
+      ).timeout(kRequestTimeout);
+
+      if (response.statusCode == 200) {
+        debugPrint("✅ Push Token Synced");
+      } else {
+        debugPrint("⚠️ Token Sync Failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("❌ Token Sync Net Error: $e");
     }
   }
 }

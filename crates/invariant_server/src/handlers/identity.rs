@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/identity.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -16,6 +17,12 @@ use invariant_engine::IdentityStorage;
 pub struct ClaimUsernameRequest {
     pub identity_id: Uuid,
     pub username: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdatePushTokenRequest {
+    pub identity_id: Uuid,
+    pub fcm_token: String,
 }
 
 /// POST /identity/claim_username
@@ -38,8 +45,21 @@ pub async fn claim_username_handler(
     }
 }
 
+/// POST /identity/push_token
+pub async fn update_push_token_handler(
+    Extension(state): Extension<SharedState>,
+    Json(payload): Json<UpdatePushTokenRequest>,
+) -> StatusCode {
+    match state.engine.get_storage().update_fcm_token(&payload.identity_id, &payload.fcm_token).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("Failed to update FCM token: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
 /// GET /leaderboard
-/// FIXED: Ensured both match arms return a compatible Axum Response type
 pub async fn get_leaderboard_handler(
     Extension(state): Extension<SharedState>,
 ) -> impl IntoResponse {

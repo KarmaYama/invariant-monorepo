@@ -1,10 +1,8 @@
-// crates/invariant_server/src/db.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use async_trait::async_trait;
@@ -28,7 +26,7 @@ impl IdentityStorage for PostgresStorage {
         let result = sqlx::query(r#"
             SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
                    hardware_brand, hardware_device_hash, hardware_product,
-                   genesis_version, network, username, is_genesis_eligible
+                   genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities WHERE id = $1
         "#)
         .bind(id).fetch_optional(&self.pool).await.map_err(|e| EngineError::Storage(e.to_string()))?;
@@ -40,7 +38,7 @@ impl IdentityStorage for PostgresStorage {
         let result = sqlx::query(r#"
             SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
                    hardware_brand, hardware_device_hash, hardware_product,
-                   genesis_version, network, username, is_genesis_eligible
+                   genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities WHERE public_key = $1
         "#)
         .bind(public_key).fetch_optional(&self.pool).await.map_err(|e| EngineError::Storage(e.to_string()))?;
@@ -69,9 +67,9 @@ impl IdentityStorage for PostgresStorage {
             INSERT INTO identities (
                 id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
                 hardware_brand, hardware_device_hash, hardware_product,
-                genesis_version, network, username, is_genesis_eligible
+                genesis_version, network, username, is_genesis_eligible, fcm_token
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (id) DO UPDATE SET 
                 status = $7, 
                 continuity_score = $3, 
@@ -91,6 +89,7 @@ impl IdentityStorage for PostgresStorage {
         .bind(network_str)
         .bind(&identity.username)
         .bind(identity.is_genesis_eligible)
+        .bind(&identity.fcm_token)
         .execute(&self.pool)
         .await
         .map_err(|e| EngineError::Storage(e.to_string()))?;
@@ -99,18 +98,12 @@ impl IdentityStorage for PostgresStorage {
     }
 
     async fn log_heartbeat(&self, identity: &Identity, heartbeat: &Heartbeat) -> Result<u64, EngineError> {
-        // 1. Start Transaction
         let mut tx = self.pool.begin().await.map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        // 🛡️ SECURITY FIX: FAIL FAST
-        // If a row is locked for more than 1 second (1000ms), ABORT the transaction.
-        // This prevents 1,500 bots from hanging the entire server connection pool.
-        // The error returned will be a "lock timeout", which we map to 429 in the handler.
         if let Err(e) = sqlx::query("SET LOCAL lock_timeout = '1000ms'").execute(&mut *tx).await {
             return Err(EngineError::Storage(e.to_string()));
         }
 
-        // 2. Atomic Update (The Contention Point)
         let row = sqlx::query("
             UPDATE identities 
             SET 
@@ -131,7 +124,6 @@ impl IdentityStorage for PostgresStorage {
 
         let new_score: i64 = row.try_get("continuity_score").map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        // 3. Log Heartbeat (With Idempotency)
         let insert_result = sqlx::query("INSERT INTO heartbeats (identity_id, device_signature, timestamp) VALUES ($1, $2, $3)")
             .bind(heartbeat.identity_id)
             .bind(&heartbeat.device_signature)
@@ -145,8 +137,6 @@ impl IdentityStorage for PostgresStorage {
                 Ok(new_score as u64)
             },
             Err(e) => {
-                // If the heartbeat already exists (Idempotency), we still return success 
-                // for the score so the client doesn't retry unnecessarily.
                 if let Some(db_err) = e.as_database_error() {
                     if db_err.code().as_deref() == Some("23505") { // Unique Violation
                         return Ok(identity.continuity_score); 
@@ -192,7 +182,7 @@ impl IdentityStorage for PostgresStorage {
         let rows = sqlx::query(r#"
             SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
                    hardware_brand, hardware_device_hash, hardware_product,
-                   genesis_version, network, username, is_genesis_eligible
+                   genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities 
             WHERE status = 'active'
             ORDER BY continuity_score DESC, streak DESC
@@ -210,6 +200,39 @@ impl IdentityStorage for PostgresStorage {
             }
         }
         Ok(identities)
+    }
+
+    // 🚀 NEW: Implementations for Wake-Up Logic
+    async fn update_fcm_token(&self, id: &Uuid, token: &str) -> Result<(), EngineError> {
+        sqlx::query("UPDATE identities SET fcm_token = $1 WHERE id = $2")
+            .bind(token)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| EngineError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_late_fcm_tokens(&self, minutes_since_heartbeat: i64) -> Result<Vec<String>, EngineError> {
+        let rows = sqlx::query(r#"
+            SELECT fcm_token 
+            FROM identities 
+            WHERE status = 'active' 
+            AND fcm_token IS NOT NULL
+            AND last_heartbeat < NOW() - make_interval(mins => $1)
+            -- Only fetch users who haven't been dormant for too long (e.g. < 48 hours to avoid spamming dead users)
+            AND last_heartbeat > NOW() - INTERVAL '48 hours'
+        "#)
+        .bind(minutes_since_heartbeat as i32)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EngineError::Storage(e.to_string()))?;
+
+        let tokens = rows.into_iter()
+            .filter_map(|row| row.try_get::<String, _>("fcm_token").ok())
+            .collect();
+        
+        Ok(tokens)
     }
 }
 
@@ -240,6 +263,7 @@ fn map_row_to_identity(row: Option<sqlx::postgres::PgRow>) -> Result<Option<Iden
                 status,
                 username: row.try_get("username").ok(),
                 is_genesis_eligible: row.try_get("is_genesis_eligible").unwrap_or(false),
+                fcm_token: row.try_get("fcm_token").ok(),
                 hardware_brand: row.try_get("hardware_brand").ok(),
                 hardware_device: row.try_get("hardware_device_hash").ok(),
                 hardware_product: row.try_get("hardware_product").ok(),

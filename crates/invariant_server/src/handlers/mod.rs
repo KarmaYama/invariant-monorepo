@@ -1,9 +1,9 @@
+// crates/invariant_server/src/handlers/mod.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use axum::{Router, routing::{get, post}, extract::Path, http::StatusCode, Extension, Json};
@@ -61,10 +61,11 @@ pub fn app_router(state: SharedState) -> Router {
         // STATEFUL (For App)
         .route("/genesis", post(genesis::genesis_handler))
         // STATELESS (For SDK/B2B)
-        .route("/verify", post(genesis::verify_stateless_handler)) // <--- ADDED THIS
+        .route("/verify", post(genesis::verify_stateless_handler)) 
         .route("/heartbeat", post(heartbeat::heartbeat_handler))
         .route("/identity/:id", get(check_identity_handler))
         .route("/identity/claim_username", post(identity::claim_username_handler))
+        .route("/identity/push_token", post(identity::update_push_token_handler)) // <--- ROUTE ADDED
         .route("/leaderboard", get(identity::get_leaderboard_handler))
         .route("/genesis/challenge", get(genesis::get_challenge_handler))
         .layer(cors)

@@ -1,14 +1,10 @@
+// crates/invariant_engine/tests/attestation_tests.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
- *
- * This source code is licensed under the Business Source License (BSL 1.1) 
- * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 #[cfg(test)]
 mod tests {
-    // External Crates
     use async_trait::async_trait;
     use chrono::Utc;
     use std::collections::HashMap;
@@ -18,7 +14,6 @@ mod tests {
     use rand_core::OsRng; 
     use p256::pkcs8::EncodePublicKey;
 
-    // Internal Crates
     use invariant_engine::{InvariantEngine, IdentityStorage, EngineError, attestation, core::EngineConfig};
     use invariant_shared::{Identity, IdentityStatus, Heartbeat, GenesisRequest, Network};
 
@@ -61,42 +56,40 @@ mod tests {
             Err(EngineError::IdentityNotFound(identity.id))
         }
 
-        async fn run_reaper(&self) -> Result<u64, EngineError> {
-            Ok(0)
-        }
+        async fn run_reaper(&self) -> Result<u64, EngineError> { Ok(0) }
 
         async fn set_username(&self, id: &Uuid, username: &str) -> Result<bool, EngineError> {
             let mut map = self.identities.write().await;
-            
-            // Check if username is already taken by someone else
             for identity in map.values() {
                 if let Some(existing_name) = &identity.username {
-                    if existing_name == username {
-                        return Ok(false); // Username taken
-                    }
+                    if existing_name == username { return Ok(false); }
                 }
             }
-
             if let Some(id_ref) = map.get_mut(id) {
-                if id_ref.username.is_some() {
-                    return Ok(false); // Already has a name
-                }
+                if id_ref.username.is_some() { return Ok(false); }
                 id_ref.username = Some(username.to_string());
                 return Ok(true);
             }
-            
-            Ok(false) // Identity not found
+            Ok(false) 
         }
 
-        // 🚀 FIXED: Added missing get_leaderboard implementation for MockStorage
         async fn get_leaderboard(&self, limit: i64) -> Result<Vec<Identity>, EngineError> {
             let map = self.identities.read().await;
             let mut list: Vec<Identity> = map.values().cloned().collect();
-            
-            // Sort by score descending
             list.sort_by(|a, b| b.continuity_score.cmp(&a.continuity_score));
-            
             Ok(list.into_iter().take(limit as usize).collect())
+        }
+
+        async fn update_fcm_token(&self, id: &Uuid, token: &str) -> Result<(), EngineError> {
+            let mut map = self.identities.write().await;
+            if let Some(id_ref) = map.get_mut(id) {
+                id_ref.fcm_token = Some(token.to_string());
+            }
+            Ok(())
+        }
+
+        async fn get_late_fcm_tokens(&self, _minutes: i64) -> Result<Vec<String>, EngineError> {
+            Ok(vec![])
         }
     }
 
@@ -108,14 +101,12 @@ mod tests {
             v.extend_from_slice(content);
             v
         }
-        
         fn int(val: u8) -> Vec<u8> { tag(0x02, &[val]) }
         fn enum_val(val: u8) -> Vec<u8> { tag(0x0a, &[val]) }
         fn octet(val: &[u8]) -> Vec<u8> { tag(0x04, val) }
         fn seq(content: &[u8]) -> Vec<u8> { tag(0x30, content) }
         
         let sec_level = if is_software { 0 } else { 1 };
-        
         let mut root_content = Vec::new();
         root_content.extend(int(1));                 
         root_content.extend(enum_val(sec_level));    
@@ -124,25 +115,18 @@ mod tests {
         root_content.extend(octet(challenge_bytes)); 
         root_content.extend(octet(b"unique_id"));
         root_content.extend(seq(&[]));               
-        
         let tee_content: Vec<u8> = Vec::new(); 
         root_content.extend(seq(&tee_content));
-
         seq(&root_content)
     }
-
-    // --- GROUP 1: NONCE BINDING & SECURITY ---
 
     #[test]
     fn test_attestation_nonce_success() {
         let nonce = b"valid_nonce_123";
         let der_bytes = encode_test_extension(false, nonce);
         let result = attestation::verify_extension_and_extract(&der_bytes, Some(nonce));
-        
         if let Err(EngineError::InvalidAttestation(msg)) = &result {
-             if msg.contains("Challenge mismatch") {
-                 panic!("Challenge should have matched!");
-             }
+             if msg.contains("Challenge mismatch") { panic!("Challenge should have matched!"); }
         }
     }
 
@@ -152,12 +136,9 @@ mod tests {
         let fake_nonce = b"fake_nonce";
         let der_bytes = encode_test_extension(false, real_nonce);
         let result = attestation::verify_extension_and_extract(&der_bytes, Some(fake_nonce));
-        
         assert!(result.is_err());
         match result {
-            Err(EngineError::InvalidAttestation(msg)) => {
-                assert!(msg.contains("Challenge mismatch"), "Error was: {}", msg);
-            },
+            Err(EngineError::InvalidAttestation(msg)) => { assert!(msg.contains("Challenge mismatch"), "Error was: {}", msg); },
             _ => panic!("Expected Nonce Mismatch Error"),
         }
     }
@@ -167,25 +148,17 @@ mod tests {
         let nonce = b"nonce";
         let der_bytes = encode_test_extension(true, nonce);
         let result = attestation::verify_extension_and_extract(&der_bytes, Some(nonce));
-        
         assert!(result.is_err());
         match result {
-            Err(EngineError::InvalidAttestation(msg)) => {
-                if msg.contains("Software-backed") { return; }
-            },
+            Err(EngineError::InvalidAttestation(msg)) => { if msg.contains("Software-backed") { return; } },
             _ => (),
         }
     }
 
-    // --- GROUP 2: HEARTBEAT & GENESIS LOGIC ---
-
     #[tokio::test]
     async fn test_genesis_idempotency() {
         let storage = MockStorage::default();
-        let config = EngineConfig { 
-            network: Network::Testnet, 
-            genesis_version: 1 
-        };
+        let config = EngineConfig { network: Network::Testnet, genesis_version: 1 };
         let engine = InvariantEngine::new(storage, config);
         
         let pk = vec![0xAA, 0xBB, 0xCC];
@@ -201,6 +174,7 @@ mod tests {
             username: None,
             streak: 10,
             is_genesis_eligible: true,
+            fcm_token: None, // 🚀 FIX
             hardware_brand: None, hardware_device: None, hardware_product: None,
             genesis_version: 1,
             network: Network::Testnet,
@@ -237,6 +211,7 @@ mod tests {
             status: IdentityStatus::Active,
             username: None,
             is_genesis_eligible: true,
+            fcm_token: None, // 🚀 FIX
             streak: 0,
             hardware_brand: None, hardware_device: None, hardware_product: None,
             genesis_version: 1,
@@ -276,6 +251,7 @@ mod tests {
             status: IdentityStatus::Active,
             username: None,
             is_genesis_eligible: true,
+            fcm_token: None, // 🚀 FIX
             streak: 0,
             hardware_brand: None, hardware_device: None, hardware_product: None,
             genesis_version: 1,
@@ -312,6 +288,7 @@ mod tests {
             status: IdentityStatus::Revoked,
             username: None,
             is_genesis_eligible: true,
+            fcm_token: None, // 🚀 FIX
             streak: 0, 
             hardware_brand: None, hardware_device: None, hardware_product: None,
             genesis_version: 1,
@@ -354,6 +331,7 @@ mod tests {
             status: IdentityStatus::Active,
             username: None,
             is_genesis_eligible: true,
+            fcm_token: None, // 🚀 FIX
             streak: 0,
             hardware_brand: None, hardware_device: None, hardware_product: None,
             genesis_version: 1,

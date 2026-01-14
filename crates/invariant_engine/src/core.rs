@@ -1,9 +1,9 @@
+// crates/invariant_engine/src/core.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use invariant_shared::{Heartbeat, IdentityStatus, GenesisRequest, Identity, Network};
@@ -14,7 +14,7 @@ use crate::attestation;
 use chrono::Utc;
 use uuid::Uuid;
 
-/// Configuration injected at startup to control Identity Minting rules.
+/// Configuration injected at startup.
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub network: Network,
@@ -52,7 +52,7 @@ impl<S: IdentityStorage> InvariantEngine<S> {
             Some(&request.nonce)
         )?;
 
-        // 3. MINT IDENTITY (With Versioning & Network)
+        // 3. MINT IDENTITY
         let identity = Identity {
             id: Uuid::new_v4(),
             public_key: request.public_key,
@@ -60,13 +60,14 @@ impl<S: IdentityStorage> InvariantEngine<S> {
             streak: 0,
             is_genesis_eligible: false,
             username: None,
+            // 🚀 FIX: Initialize as None. Client sends this via /identity/push_token later.
+            fcm_token: None, 
             created_at: Utc::now(),
             last_heartbeat: Utc::now(),
             status: IdentityStatus::Active,
             hardware_brand: metadata.brand,
             hardware_device: metadata.device,
             hardware_product: metadata.product,
-            // Guardrails injected from Config
             genesis_version: self.config.genesis_version,
             network: self.config.network.clone(),
         };
@@ -75,6 +76,8 @@ impl<S: IdentityStorage> InvariantEngine<S> {
         Ok(identity)
     }
 
+    /// The "Forgiving" Heartbeat Processor
+    /// Accepts signals within a 25-hour rolling window.
     pub async fn process_heartbeat(&self, heartbeat: Heartbeat) -> Result<u64, EngineError> {
         let identity = self.storage
             .get_identity(&heartbeat.identity_id)
@@ -86,24 +89,41 @@ impl<S: IdentityStorage> InvariantEngine<S> {
         }
 
         let now = Utc::now();
-        let time_since_last = now.signed_duration_since(identity.last_heartbeat);
-        if identity.continuity_score > 0 && time_since_last.num_minutes() < 235 {
-             return Err(EngineError::RateLimitExceeded);
-        }
-
-        let time_diff = now.signed_duration_since(heartbeat.timestamp);
-        if time_diff.num_minutes().abs() > 5 {
-             return Err(EngineError::StaleHeartbeat(heartbeat.timestamp.to_string()));
-        }
-
-        let payload_str = format!("{}|{}", heartbeat.identity_id, heartbeat.timestamp.to_rfc3339());
         
+        // 1. CRYPTO FIRST: Verify the signature immediately.
+        // Even if the signal is "late" due to bad cell service or Doze mode,
+        // a valid TEE signature proves the user *was* there.
+        let payload_str = format!("{}|{}", heartbeat.identity_id, heartbeat.timestamp.to_rfc3339());
         crypto::verify_signature(
             &identity.public_key,
             payload_str.as_bytes(),
             &heartbeat.device_signature
         )?;
 
+        // 2. RATE LIMIT (Anti-Battery Drain)
+        // We only allow one successful heartbeat every 55 minutes.
+        // This prevents a bugged client from mining 100 times an hour.
+        let time_since_last = now.signed_duration_since(identity.last_heartbeat);
+        if identity.continuity_score > 0 && time_since_last.num_minutes() < 55 {
+             return Err(EngineError::RateLimitExceeded);
+        }
+
+        // 3. THE GRACE BUFFER (The "25-Hour Day")
+        // We accept timestamps generated up to 28 hours ago.
+        // This handles cases where a phone generates a signal but has no internet
+        // for a full day (e.g. long flight, hiking).
+        let sig_age = now.signed_duration_since(heartbeat.timestamp);
+        if sig_age.num_hours() > 28 {
+             return Err(EngineError::StaleHeartbeat("Signature too old (>28h)".into()));
+        }
+
+        // 4. FUTURE PROTECTION
+        // Reject signatures from the future (clock skew > 5 mins)
+        if sig_age.num_minutes() < -5 {
+            return Err(EngineError::StaleHeartbeat("Timestamp in the future".into()));
+        }
+
+        // 5. Update Score
         let new_score = self.storage.log_heartbeat(&identity, &heartbeat).await?;
         Ok(new_score)
     }
