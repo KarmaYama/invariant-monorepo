@@ -1,6 +1,7 @@
 # Dockerfile.release
-# 1. Build Stage (Chef optimizes caching)
-FROM lukemathwalker/cargo-chef:latest-rust-1.75 AS chef
+# 1. Build Stage
+# 🚀 FIX: Use 'latest-rust-1' to support new crates (like 'home') using Edition 2024
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -18,11 +19,8 @@ RUN cargo build --release --bin invariant_server
 # 2. Runtime Stage
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
-# Install OpenSSL and CA certs (Required for Google Auth & Database)
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL, CA certs, and Redis client
+RUN apt-get update && apt-get install -y openssl ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/invariant_server /usr/local/bin/
-# Copy migrations if you run them at startup (optional if using sqlx-cli in build)
-# COPY --from=builder /app/crates/invariant_server/migrations ./migrations
-
 CMD ["/usr/local/bin/invariant_server"]
