@@ -9,3 +9,4 @@ license = "MIT" # Shared models are Open Source to encourage integration
 serde = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+utoipa = { workspace = true }

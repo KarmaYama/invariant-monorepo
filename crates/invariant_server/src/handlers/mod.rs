@@ -1,33 +1,42 @@
-// crates/invariant_server/src/handlers/mod.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
  */
-
-use axum::{Router, routing::{get, post}, extract::Path, http::StatusCode, Extension, Json};
+use axum::{Router, routing::{get, post}, extract::Path, http::{StatusCode, HeaderValue, header}, Extension, Json};
 use crate::state::SharedState;
 use uuid::Uuid;
 use invariant_engine::IdentityStorage;
-use chrono::{Duration};
-use tower_http::cors::{CorsLayer, Any}; 
+use chrono::Duration;
+
+// Middleware
+use tower::ServiceBuilder;
+use tower_http::{
+    cors::{CorsLayer, Any},
+    compression::CompressionLayer,
+    timeout::TimeoutLayer,
+    trace::TraceLayer,
+    set_header::SetResponseHeaderLayer,
+};
+
+// Swagger
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+use crate::api_docs::ApiDoc;
 
 pub mod genesis;
 pub mod heartbeat;
-pub mod identity; 
+pub mod identity;
 
-/// Checks if an Identity ID exists and returns its full status/score.
-/// GET /identity/:id
 async fn check_identity_handler(
     Path(id): Path<Uuid>,
     Extension(state): Extension<SharedState>,
 ) -> impl axum::response::IntoResponse {
     match state.engine.get_storage().get_identity(&id).await {
         Ok(Some(identity)) => {
-            // Calculate next available mining time (235 min cooldown)
-            let next_available = identity.last_heartbeat + Duration::minutes(235);
-            
+            // Next available = 23 Hours (1380 mins)
+            let next_available = identity.last_heartbeat + Duration::minutes(1380);
             (
                 StatusCode::OK,
                 Json(serde_json::json!({
@@ -42,32 +51,59 @@ async fn check_identity_handler(
                 }))
             )
         },
-        _ => (
-            StatusCode::NOT_FOUND, 
-            Json(serde_json::json!({ "error": "Identity not found" }))
-        ),
+        _ => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Identity not found" }))),
     }
 }
 
 pub fn app_router(state: SharedState) -> Router {
-    // CORS: Allow everything for the public API
+    // 1. CORS
     let cors = CorsLayer::new()
-        .allow_origin(Any)     
-        .allow_methods(Any)    
+        .allow_origin(Any)      
+        .allow_methods(Any)     
         .allow_headers(Any);   
 
+    // 2. Security Headers (OWASP)
+    let security_headers = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ));
+
+    // 3. Router
     Router::new()
+        // Swagger UI
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        
         .route("/health", get(|| async { "Invariant Node Online" }))
-        // STATEFUL (For App)
         .route("/genesis", post(genesis::genesis_handler))
-        // STATELESS (For SDK/B2B)
         .route("/verify", post(genesis::verify_stateless_handler)) 
+        
+        // Heartbeat (Challenge + Action)
         .route("/heartbeat", post(heartbeat::heartbeat_handler))
+        .route("/heartbeat/challenge", get(heartbeat::get_heartbeat_challenge_handler))
+
         .route("/identity/:id", get(check_identity_handler))
         .route("/identity/claim_username", post(identity::claim_username_handler))
-        .route("/identity/push_token", post(identity::update_push_token_handler)) // <--- ROUTE ADDED
+        .route("/identity/push_token", post(identity::update_push_token_handler))
         .route("/leaderboard", get(identity::get_leaderboard_handler))
         .route("/genesis/challenge", get(genesis::get_challenge_handler))
-        .layer(cors)
-        .layer(axum::Extension(state))
+        
+        // Middleware Stack (Bottom runs first)
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http()) 
+                .layer(TimeoutLayer::new(std::time::Duration::from_secs(15)))
+                .layer(CompressionLayer::new())
+                .layer(cors)
+                .layer(security_headers)
+                .layer(Extension(state))
+        )
 }

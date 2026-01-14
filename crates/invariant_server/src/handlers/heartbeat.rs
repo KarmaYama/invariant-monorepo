@@ -1,60 +1,92 @@
-// crates/invariant_server/src/handlers/heartbeat.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use axum::{Extension, Json, http::StatusCode};
 use invariant_shared::Heartbeat;
 use crate::state::SharedState;
-use tracing::{error, info, warn, instrument}; 
-use invariant_engine::EngineError;
+use crate::error_response::AppError; 
+use tracing::{info, warn, instrument, Span}; // Removed 'error'
+use rand::{Rng, thread_rng};
+use redis::AsyncCommands;
 
-/// Handles the proof of liveness signal.
-#[instrument(skip(state, payload), fields(identity_id = %payload.identity_id))]
+const CHALLENGE_TTL: u64 = 300; // 5 Minutes
+
+/// GET /heartbeat/challenge
+/// Returns a fresh nonce for the Daily Tap.
+#[utoipa::path(
+    get,
+    path = "/heartbeat/challenge",
+    responses(
+        (status = 200, description = "Challenge generated", body = inline(serde_json::Value))
+    )
+)]
+pub async fn get_heartbeat_challenge_handler(
+    Extension(state): Extension<SharedState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let mut conn = state.redis.get_multiplexed_async_connection().await
+        .map_err(|e| anyhow::anyhow!("Redis Error: {}", e))?;
+
+    let (nonce_hex, redis_key) = {
+        let mut rng = thread_rng();
+        let mut nonce_bytes = [0u8; 32];
+        rng.fill(&mut nonce_bytes);
+        let hex_val = hex::encode(nonce_bytes);
+        (hex_val.clone(), format!("challenge:{}", hex_val))
+    };
+
+    let _: () = conn.set_ex(&redis_key, "true", CHALLENGE_TTL).await
+        .map_err(|e| anyhow::anyhow!("Redis Set Error: {}", e))?;
+
+    Ok(Json(serde_json::json!({ "nonce": nonce_hex })))
+}
+
+/// POST /heartbeat
+/// Verifies the Daily Tap signal.
+#[utoipa::path(
+    post,
+    path = "/heartbeat",
+    request_body = Heartbeat,
+    responses(
+        (status = 200, description = "Tap Verified"),
+        (status = 401, description = "Invalid Signature"),
+        (status = 429, description = "Daily Limit Reached")
+    )
+)]
+#[instrument(skip(state, payload), fields(identity_id = tracing::field::Empty))] 
 pub async fn heartbeat_handler(
     Extension(state): Extension<SharedState>,
     Json(payload): Json<Heartbeat>,
-) -> StatusCode {
+) -> Result<StatusCode, AppError> {
     
+    // 1. Log ID safely
+    Span::current().record("identity_id", &payload.identity_id.to_string());
+
+    // 2. Validate Nonce (Anti-Replay)
+    let mut conn = state.redis.get_multiplexed_async_connection().await
+        .map_err(|e| anyhow::anyhow!("Redis Error: {}", e))?;
+    
+    let nonce_hex = hex::encode(&payload.nonce);
+    let redis_key = format!("challenge:{}", nonce_hex);
+
+    // Atomic GET + DEL (Single Use)
+    let val: Option<String> = conn.get_del(&redis_key).await
+        .map_err(|e| anyhow::anyhow!("Redis Auth Error: {}", e))?;
+
+    if val.is_none() {
+        warn!("⚠️ Invalid or Expired Challenge Used");
+        return Ok(StatusCode::UNAUTHORIZED);
+    }
+
+    // 3. Process Engine Logic
     match state.engine.process_heartbeat(payload).await {
         Ok(new_score) => {
-            info!(event = "heartbeat_accepted", score = new_score, "✅ Proof of Latency Verified");
-            StatusCode::OK
+            info!(event = "heartbeat_accepted", score = new_score, "✅ Daily Verification Verified");
+            Ok(StatusCode::OK)
         }
-        // 1. RATE LIMIT (429)
-        Err(EngineError::RateLimitExceeded) => {
-            warn!(event = "heartbeat_rejected", reason = "rate_limit", "⏳ Cooldown active");
-            StatusCode::TOO_MANY_REQUESTS 
-        }
-        // 2. INVALID SIGNATURE (401)
-        Err(EngineError::InvalidSignature) => {
-            warn!(event = "heartbeat_rejected", reason = "crypto_fail", "⚠️ Invalid ECDSA Signature");
-            StatusCode::UNAUTHORIZED
-        }
-        // 3. IDENTITY NOT FOUND (404) - <--- THIS FIXES YOUR "CRITICAL FAILURE"
-        Err(EngineError::IdentityNotFound(_)) => {
-            warn!(event = "heartbeat_rejected", reason = "unknown_identity", "👻 Ghost ID rejected");
-            StatusCode::NOT_FOUND
-        }
-        // 4. DATABASE BACKPRESSURE (429 or 500)
-        Err(EngineError::Storage(msg)) => {
-            // If the DB is overwhelmed by bots, we tell the client "Too Many Requests" (429)
-            if msg.contains("lock timeout") || msg.contains("55P03") {
-                warn!(event = "backpressure_active", "⚠️ Database lock contention (Load Shedding)");
-                return StatusCode::TOO_MANY_REQUESTS;
-            }
-
-            error!(event = "heartbeat_error", error = ?msg, "❌ Storage Error");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-        // 5. CATCH ALL (500)
-        Err(e) => {
-            error!(event = "heartbeat_error", error = ?e, "❌ Internal Engine Error");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        Err(e) => Err(e.into()) // Convert to structured AppError
     }
 }

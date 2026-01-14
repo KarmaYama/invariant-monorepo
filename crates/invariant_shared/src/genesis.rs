@@ -4,9 +4,10 @@
  */
 
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema; // 👈 Added
 
 /// The initial payload to create a new Identity.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)] // 👈 Added ToSchema
 pub struct GenesisRequest {
     /// The P-256 Public Key generated in StrongBox.
     pub public_key: Vec<u8>,
@@ -16,7 +17,5 @@ pub struct GenesisRequest {
     pub attestation_chain: Vec<Vec<u8>>,
 
     /// The cryptographic nonce (challenge) issued by the server.
-    /// The device MUST have included this in the attestation extension.
-    /// If this does not match the attestation's internal challenge, Genesis fails.
     pub nonce: Vec<u8>,
 }

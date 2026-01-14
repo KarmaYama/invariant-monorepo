@@ -9,6 +9,8 @@
 mod db;
 mod state;
 mod handlers;
+mod error_response; // ✅ Register Structured Error Module
+mod api_docs;       // ✅ Register OpenAPI/Swagger Module
 mod services { pub mod push; }
 
 use std::net::SocketAddr;
@@ -26,7 +28,8 @@ use crate::state::AppState;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     
-    // JSON Logging for Production
+    // 1. Production JSON Logging
+    // We use JSON format for better ingestion by Logstash/Datadog/Splunk
     let log_format = tracing_subscriber::fmt::format()
         .with_level(true)
         .with_target(true)
@@ -41,14 +44,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer().event_format(log_format))
         .init();
 
-    // 1. Initialize FCM (Server-Driven Wake Up)
+    // 2. Initialize FCM (Server-Driven Wake Up)
+    // This loads the Service Account credentials for sending push notifications
     if let Err(e) = services::push::initialize().await {
         tracing::error!("⚠️ Failed to initialize FCM: {}. Wake-up calls disabled.", e);
     }
 
-    // ⚡ PERFORMANCE TUNING
-    // Max Connections: 75 allows more bots to queue.
-    // Acquire Timeout: 5s gives the pool time to find a connection during a spike.
+    // 3. Database Connection Pool (Performance Tuned)
+    // Max Connections: 75 allows high concurrency without starving the DB.
+    // Acquire Timeout: 5s fails fast during outages rather than hanging.
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let pool = PgPoolOptions::new()
         .max_connections(75) 
@@ -56,11 +60,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
     
+    // Auto-run migrations on startup
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    // 4. Redis Connection (Rate Limiting & Nonces)
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let redis_client = redis::Client::open(redis_url)?;
 
+    // 5. App Configuration
     let network_str = std::env::var("INVARIANT_NETWORK").unwrap_or_else(|_| "testnet".into());
     let network = match network_str.to_lowercase().as_str() {
         "mainnet" => Network::Mainnet,
@@ -80,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "🚀 Booting Invariant Node"
     );
 
+    // 6. Initialize Engine & State
     let storage = PostgresStorage::new(pool.clone());
     let engine_config = EngineConfig { network, genesis_version };
     let engine = InvariantEngine::new(storage, engine_config);
@@ -89,15 +97,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         redis: redis_client,
     });
 
-    // 2. Background Worker: Reaper + Wake Up Call (Isolated thread)
+    // 7. Background Worker (Reaper + Wake Up Call)
+    // Runs on a detached Tokio thread to keep the main event loop clean.
     let worker_storage = PostgresStorage::new(pool.clone());
     tokio::spawn(async move {
-        // Run every 15 minutes to catch late users efficiently
+        // Run every 15 minutes
         let mut interval = tokio::time::interval(Duration::from_secs(900)); 
         loop {
             interval.tick().await;
             
             // A. Wake Up Call (Users > 24 hours late)
+            // Finds users who missed their daily tap and nudges them via FCM.
             match worker_storage.get_late_fcm_tokens(24 * 60).await {
                 Ok(tokens) => {
                     if !tokens.is_empty() {
@@ -112,13 +122,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // B. Reaper (Users > 30 days dormant)
-            // We run this every cycle, but it only touches ancient rows.
+            // Marks abandoned identities as 'Dormant' or 'Revoked'.
             if let Err(e) = worker_storage.run_reaper().await {
                 tracing::error!("Reaper failed: {}", e);
             }
         }
     });
 
+    // 8. Launch API Server
     let app = handlers::app_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     

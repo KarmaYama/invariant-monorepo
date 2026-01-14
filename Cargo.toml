@@ -38,7 +38,9 @@ rand = "0.8"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
 reqwest = { version = "0.11", features = ["json"] }
 axum = "0.7"
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { version = "0.5", features = [
+    "cors", "trace", "compression-full", "timeout", "set-header", "sensitive-headers", "request-id", "util"
+] }
 tracing = "0.1"
 tracing-subscriber = {version = "0.3", features = ["fmt", "env-filter", "json"] }
 base64 = "0.21"
@@ -53,3 +55,8 @@ futures = "0.3"
 ratatui = "0.26"
 # FIX: Enable event-stream feature
 crossterm = { version = "0.27", features = ["event-stream"] }
+
+# 🔒 Production Hardening & Docs
+tower = { version = "0.4", features = ["util", "timeout", "limit"] }
+utoipa = { version = "4.2", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }

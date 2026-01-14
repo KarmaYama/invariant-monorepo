@@ -23,11 +23,11 @@ pub enum EngineError {
     #[error("Hardware Attestation failed: {0}")]
     InvalidAttestation(String),
 
-    #[error("Heartbeat rejected: Timestamp {0} is too old")]
+    #[error("Verification rejected: Timestamp {0} is too old")]
     StaleHeartbeat(String),
 
-    #[error("Rate Limit: You are mining too fast. Wait 4 hours.")]
-    RateLimitExceeded, // <--- NEW
+    #[error("Rate Limit: Verification is allowed once every 24 hours.")]
+    RateLimitExceeded, 
 
     #[error("Storage failure: {0}")]
     Storage(String),

@@ -1,4 +1,3 @@
-// crates/invariant_shared/src/identity.rs
 /*
  * Copyright (c) 2025 Invariant Protocol
  * Use of this software is governed by the MIT License.
@@ -7,8 +6,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use utoipa::ToSchema; // 👈 Added
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)] // 👈 Added ToSchema
 #[serde(rename_all = "lowercase")]
 pub enum IdentityStatus {
     Active,
@@ -16,7 +16,7 @@ pub enum IdentityStatus {
     Revoked,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)] // 👈 Added ToSchema
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Testnet,
@@ -35,7 +35,7 @@ impl ToString for Network {
 }
 
 /// The core invariant representing a persistent entity.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)] // 👈 Added ToSchema
 pub struct Identity {
     pub id: Uuid,
     pub public_key: Vec<u8>,
@@ -49,7 +49,6 @@ pub struct Identity {
     #[serde(default)]
     pub is_genesis_eligible: bool,
 
-    // 🚀 NEW: The Wake-Up Token
     pub fcm_token: Option<String>,
 
     pub created_at: DateTime<Utc>,
