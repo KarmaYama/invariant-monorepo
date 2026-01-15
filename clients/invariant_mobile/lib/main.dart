@@ -3,31 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'theme_manager.dart';
 import 'screens/boot_loader.dart';
-import 'services/push_service.dart';
+import 'services/push_service.dart'; // Keep import for background handler
 
 void main() async {
+  // 1. Ensure Bindings
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize Firebase Core
+  // 2. Initialize Firebase (Fail Safe)
+  // We do NOT block the UI thread with complex storage reads here.
   try {
     await Firebase.initializeApp();
-    // Register Background Handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
-    debugPrint("⚠️ Firebase Init Failed: $e");
+    debugPrint("⚠️ Firebase Init Warning: $e");
   }
 
-  // 2. Try to get ID for Push Init (Best Effort)
-  const storage = FlutterSecureStorage();
-  String? id = await storage.read(key: 'identity_id');
-  
-  if (id != null) {
-    await PushService.initialize(id);
-  }
-
+  // 3. Launch App Immediately
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeController(),
