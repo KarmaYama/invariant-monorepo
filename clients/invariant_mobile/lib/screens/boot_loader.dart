@@ -1,4 +1,5 @@
 // clients/invariant_mobile/lib/screens/boot_loader.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -21,95 +22,98 @@ class _BootLoaderState extends State<BootLoader> {
   @override
   void initState() {
     super.initState();
-    _checkStatus();
+    _bootstrap();
   }
 
-  Future<void> _checkStatus() async {
-    // 1. Check Local Storage (Fast Path)
+  Future<void> _bootstrap() async {
+    // 1. Minimum Branding Time (1.5s) so the logo isn't a glitch
+    await Future.delayed(const Duration(milliseconds: 1500));
+    
+    // 2. Load Local ID
     String? id = await _storage.read(key: 'identity_id');
     
-    if (id != null) {
-      if (await _validateSession(id)) return;
-    }
+    if (!mounted) return;
 
-    // 2. RECOVERY PATH: Check Hardware Keystore
-    // If we lost local storage (app reinstall/clear data) but key remains in TEE
+    if (id != null) {
+      // 3. Verify Session (With Strict Timeout)
+      bool isValid = false;
+      try {
+        // We give the server 5 seconds to say "Yes, I know this ID".
+        // If it times out, we assume we are OFFLINE and let the user in (Fail Open).
+        // But if it returns false (404), we know we are wiped.
+        isValid = await _client.checkSession(id).timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        debugPrint("⚠️ BootNet Timeout: Entering Offline Mode");
+        isValid = true; 
+      } catch (e) {
+        debugPrint("⚠️ BootNet Error: $e");
+        isValid = true; // Fail Open
+      }
+
+      if (!mounted) return;
+
+      if (isValid) {
+        // Happy Path: Go to Dashboard
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => IdentityCard(identityId: id)),
+        );
+      } else {
+        // 4. DEAD SESSION (Server said 404). 
+        // Attempt Silent Resurrection first.
+        debugPrint("💀 Session Dead ($id). Attempting Resurrection...");
+        await _attemptSilentResurrection();
+      }
+    } else {
+      // 5. No Local ID: Check Hardware for existing key (Reinstall case)
+      await _attemptSilentResurrection(fallbackToOnboarding: true);
+    }
+  }
+
+  /// Tries to recover an account using the Hardware Key if Local Storage is empty/invalid.
+  Future<void> _attemptSilentResurrection({bool fallbackToOnboarding = false}) async {
     try {
       final bool hasKey = await platform.invokeMethod('hasIdentity');
       
       if (hasKey) {
-        debugPrint("🔐 HARDWARE KEY FOUND. ATTEMPTING SILENT RECOVERY...");
-        await _attemptSilentRecovery();
-        return;
+        debugPrint("🔐 Hardware Key Detected. Resyncing...");
+        
+        // A. Get Challenge
+        final nonce = await _client.getGenesisChallenge();
+        if (nonce == null) throw Exception("Server Unreachable");
+
+        // B. Get Key (Non-Destructive)
+        final result = await platform.invokeMethod('recoverIdentity');
+        final Map<Object?, Object?> data = result;
+        
+        final pkBytes = (data['publicKey'] as List<Object?>).map((e) => e as int).toList();
+        final chainBytes = (data['attestationChain'] as List<Object?>).map((c) => (c as List<Object?>).map((b) => b as int).toList()).toList();
+
+        // C. Register (Server handles de-duplication)
+        final String? newId = await _client.genesis(pkBytes, chainBytes, nonce);
+
+        if (newId != null) {
+          debugPrint("✅ ACCOUNT RESTORED: $newId");
+          await _storage.write(key: 'identity_id', value: newId);
+          
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => IdentityCard(identityId: newId)),
+          );
+          return;
+        }
       }
     } catch (e) {
-      debugPrint("Recovery Check Failed: $e");
+      debugPrint("❌ Resurrection Failed: $e");
     }
 
-    // 3. New User Path
+    // Fallback: If resurrection failed or no key exists, go to Onboarding
+    // First, wipe any garbage storage to be safe.
+    await _storage.deleteAll();
+    
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
     );
-  }
-
-  Future<bool> _validateSession(String id) async {
-    final isValid = await _client.checkSession(id);
-    if (!mounted) return false;
-
-    if (isValid) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => IdentityCard(identityId: id)),
-      );
-      return true;
-    } else {
-      await _storage.deleteAll(); // Wipe invalid session
-      return false;
-    }
-  }
-
-  Future<void> _attemptSilentRecovery() async {
-    try {
-      // 1. Get a fresh nonce (Protocol Requirement)
-      // Even though we aren't generating a new key, we need a nonce 
-      // if the server requires it for chain validation (though technically
-      // for existing keys we might just need the pubkey, reusing genesis endpoint 
-      // is the cleanest path because it handles the "Lookup by PubKey" logic).
-      final nonce = await _client.getGenesisChallenge();
-      if (nonce == null) throw Exception("Server unreachable");
-
-      // 2. Get Existing Key Materials (Non-Destructive)
-      final result = await platform.invokeMethod('recoverIdentity');
-      final Map<Object?, Object?> data = result;
-      
-      final pkBytes = (data['publicKey'] as List<Object?>).map((e) => e as int).toList();
-      final chainBytes = (data['attestationChain'] as List<Object?>).map((c) => (c as List<Object?>).map((b) => b as int).toList()).toList();
-
-      // 3. Send to Server
-      // The server's `process_genesis` logic checks:
-      // "if public_key exists, return existing identity"
-      // This acts as our login!
-      final String? recoveredId = await _client.genesis(pkBytes, chainBytes, nonce);
-
-      if (recoveredId != null) {
-        debugPrint("✅ ACCOUNT RECOVERED: $recoveredId");
-        await _storage.write(key: 'identity_id', value: recoveredId);
-        
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => IdentityCard(identityId: recoveredId)),
-        );
-      } else {
-        throw Exception("Server rejected recovery");
-      }
-    } catch (e) {
-      debugPrint("❌ Silent Recovery Failed: $e");
-      // Fallback to onboarding if recovery fails
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      );
-    }
   }
 
   @override
@@ -117,14 +121,7 @@ class _BootLoaderState extends State<BootLoader> {
     return const Scaffold(
       backgroundColor: Colors.black,
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shield_outlined, size: 80, color: Colors.cyanAccent),
-            SizedBox(height: 20),
-            Text("VERIFYING INTEGRITY...", style: TextStyle(color: Colors.white54, letterSpacing: 2)),
-          ],
-        ),
+        child: Icon(Icons.shield_outlined, size: 80, color: Colors.cyanAccent),
       ),
     );
   }

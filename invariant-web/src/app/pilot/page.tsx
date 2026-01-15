@@ -67,7 +67,7 @@ export default function PilotGuide() {
             <div className="bg-black/40 border border-white/10 px-4 py-2 rounded text-left">
               <div className="text-[10px] font-mono text-[#00FFC2]/60 uppercase mb-1">SHA-256 FINGERPRINT</div>
               <div className="text-xs font-mono text-white/50 select-all">
-                2f87498fc106b8e881503eff4dd1e16ae605420a8b27314c7e51310f2b4dd1c7
+                f7833614e34ecd3235a88a8867ec330fa030e4bf7b28167bdcb008bd0e33f12c
               </div>
             </div>
 
