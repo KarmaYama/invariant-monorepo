@@ -1,3 +1,4 @@
+// clients/invariant_mobile/packages/native_keystore/android/src/main/kotlin/com/example/native_keystore/NativeKeystorePlugin.kt
 package com.example.native_keystore
 
 import androidx.annotation.NonNull
@@ -12,14 +13,13 @@ import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.spec.ECGenParameterSpec
 import java.security.Signature
-import android.content.Context
+import java.security.cert.Certificate
 
 class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
     private lateinit var channel : MethodChannel
     private val KEY_ALIAS = "invariant_identity_key"
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        // Register the channel with the SAME name used in your Dart code
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.invariant.protocol/keystore")
         channel.setMethodCallHandler(this)
     }
@@ -27,9 +27,19 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         try {
             when (call.method) {
+                // 🔍 NEW: Check if key exists (Non-destructive)
+                "hasIdentity" -> {
+                    val keyStore = KeyStore.getInstance("AndroidKeyStore")
+                    keyStore.load(null)
+                    result.success(keyStore.containsAlias(KEY_ALIAS))
+                }
+                // 🔍 NEW: Recover existing key materials
+                "recoverIdentity" -> {
+                    result.success(getExistingIdentity())
+                }
                 "generateIdentity" -> {
                     val nonceHex = call.argument<String>("nonce")!!
-                    // Clean up old keys for fresh start
+                    // ⚠️ DESTRUCTIVE ACTION
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
                     keyStore.deleteEntry(KEY_ALIAS)
@@ -52,6 +62,22 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
 
     // --- CRYPTO LOGIC ---
 
+    private fun getExistingIdentity(): Map<String, Any>? {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+        
+        if (!keyStore.containsAlias(KEY_ALIAS)) return null
+
+        val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.PrivateKeyEntry ?: return null
+        // Get the chain
+        val certs = keyStore.getCertificateChain(KEY_ALIAS) ?: return null
+
+        val chainList = certs.map { cert -> cert.encoded.map { it.toInt() and 0xFF }.toList() }
+        val publicKeyBytes = entry.certificate.publicKey.encoded.map { it.toInt() and 0xFF }.toList()
+
+        return mapOf("publicKey" to publicKeyBytes, "attestationChain" to chainList)
+    }
+
     private fun generateIdentity(nonceHex: String): Map<String, Any> {
         val challengeBytes = hexStringToByteArray(nonceHex)
         val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
@@ -67,15 +93,8 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
         kpg.initialize(parameterSpec)
         kpg.generateKeyPair()
 
-        val keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
-        val entry = keyStore.getEntry(KEY_ALIAS, null) as KeyStore.PrivateKeyEntry
-        val certs = keyStore.getCertificateChain(KEY_ALIAS)
-
-        val chainList = certs.map { cert -> cert.encoded.map { it.toInt() and 0xFF }.toList() }
-        val publicKeyBytes = entry.certificate.publicKey.encoded.map { it.toInt() and 0xFF }.toList()
-
-        return mapOf("publicKey" to publicKeyBytes, "attestationChain" to chainList)
+        // Reuse the retrieval logic
+        return getExistingIdentity()!!
     }
 
     private fun signData(data: String): List<Int> {

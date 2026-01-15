@@ -1,16 +1,17 @@
+// clients/invariant_mobile/lib/screens/identity_card.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../api_client.dart';
 import '../utils/time_helper.dart';
-import '../utils/genesis_logic.dart'; 
 import '../widgets/genesis_ring.dart'; 
-import 'leaderboard_screen.dart';
 import '../theme_manager.dart';
 import '../services/update_service.dart';
+// Note: leaderboard_screen.dart import removed if not used directly, 
+// OR keep it if you navigate to it (which we do below).
+import 'leaderboard_screen.dart'; 
 
 class IdentityCard extends StatefulWidget {
   final String identityId;
@@ -25,35 +26,20 @@ class _IdentityCardState extends State<IdentityCard> {
 
   Map<String, dynamic>? _identityData;
   Timer? _refreshTimer;
-  Timer? _countdownTimer;
-  DateTime? _targetTime; 
-  String _nextPulse = "SYNCING...";
   bool _isSignaling = false; 
-  bool _isBatteryOptimized = true;
+  bool _canTap = false; // Controls the UI state
 
   @override
   void initState() {
     super.initState();
-    _checkSystemHealth();
     _fetchData();
-    _startCountdown();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _fetchData());
+    // Refresh status every minute to check if 24h cooldown passed
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) => _fetchData());
     
-    // Check for updates after the UI builds
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUsernameStatus();
       UpdateService().checkForUpdate(context);
     });
-  }
-
-  Future<void> _checkSystemHealth() async {
-    final status = await Permission.ignoreBatteryOptimizations.status;
-    if (mounted) setState(() => _isBatteryOptimized = !status.isGranted);
-  }
-
-  Future<void> _requestBatteryFix() async {
-    await Permission.ignoreBatteryOptimizations.request();
-    await _checkSystemHealth();
   }
 
   Future<void> _fetchData() async {
@@ -62,18 +48,75 @@ class _IdentityCardState extends State<IdentityCard> {
       if (mounted && data != null) {
         setState(() {
           _identityData = data;
-          if (data['next_available'] != null) {
-            _targetTime = DateTime.parse(data['next_available']).toLocal();
-          }
+          _checkCooldown(data['next_available']);
         });
       }
     } catch (e) { debugPrint("Sync Error: $e"); }
   }
 
+  void _checkCooldown(String? nextAvailable) {
+    if (nextAvailable == null) return;
+    final target = DateTime.parse(nextAvailable).toLocal();
+    final now = DateTime.now();
+    setState(() => _canTap = now.isAfter(target));
+  }
+
+  Future<void> _handleManualTap() async {
+    if (!_canTap || _isSignaling) return;
+    
+    setState(() => _isSignaling = true);
+    HapticFeedback.lightImpact();
+
+    try {
+      // 1. Get Fresh Server Nonce
+      final client = InvariantClient();
+      final nonce = await client.getHeartbeatChallenge();
+      
+      if (nonce == null) {
+        _showSnack("Server Unreachable");
+        return;
+      }
+
+      // 2. Sign (ID + Nonce + Timestamp)
+      // This matches the Rust backend: payload = "ID|NONCE_HEX|TIMESTAMP"
+      String timestamp = TimeHelper.canonicalUtcTimestamp();
+      final payload = "${widget.identityId}|$nonce|$timestamp";
+      
+      final signature = await platform.invokeMethod('signHeartbeat', {'payload': payload});
+      final sigBytes = (signature as List<Object?>).map((e) => e as int).toList();
+
+      // 3. Submit
+      final success = await client.heartbeat(widget.identityId, sigBytes, nonce, timestamp);
+      
+      if (success) {
+        HapticFeedback.heavyImpact();
+        await _fetchData(); // Refresh UI to show new score/cooldown
+        _showSnack("IDENTITY VERIFIED");
+      } else {
+        _showSnack("VERIFICATION FAILED");
+      }
+    } catch (e) {
+      debugPrint("Tap Error: $e");
+      _showSnack("HARDWARE ERROR");
+    } finally {
+      if (mounted) setState(() => _isSignaling = false);
+    }
+  }
+
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.spaceGrotesk(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF00FFC2),
+        duration: const Duration(seconds: 2),
+      )
+    );
+  }
+
   Future<void> _checkUsernameStatus() async {
     if (_identityData == null) await _fetchData();
     if (!mounted) return;
-
     if (_identityData != null && _identityData!['username'] == null) {
       _showUsernameSheet();
     }
@@ -98,44 +141,9 @@ class _IdentityCardState extends State<IdentityCard> {
     );
   }
 
-  void _startCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_targetTime == null) return;
-      final now = DateTime.now();
-      final remaining = _targetTime!.difference(now);
-      if (remaining.isNegative) {
-        if (!_isSignaling) _triggerAutoHeartbeat();
-        if (mounted) setState(() => _nextPulse = _isSignaling ? "SIGNALING..." : "READY");
-      } else {
-        final formatted = "${remaining.inHours}:${(remaining.inMinutes % 60).toString().padLeft(2, '0')}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')}";
-        if (mounted) setState(() => _nextPulse = formatted);
-      }
-    });
-  }
-
-  Future<void> _triggerAutoHeartbeat() async {
-    if (_isSignaling) return;
-    setState(() => _isSignaling = true);
-    HapticFeedback.lightImpact();
-    try {
-      String timestamp = TimeHelper.canonicalUtcTimestamp();
-      final payload = "${widget.identityId}|$timestamp";
-      final signature = await platform.invokeMethod('signHeartbeat', {'payload': payload});
-      final sigBytes = (signature as List<Object?>).map((e) => e as int).toList();
-      final success = await InvariantClient().heartbeat(widget.identityId, sigBytes, timestamp);
-      if (success) {
-        HapticFeedback.heavyImpact();
-        await Future.delayed(const Duration(seconds: 2));
-        await _fetchData();
-      }
-    } catch (e) { debugPrint("HB Error: $e"); }
-    finally { if (mounted) setState(() => _isSignaling = false); }
-  }
-
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -144,22 +152,10 @@ class _IdentityCardState extends State<IdentityCard> {
     final theme = context.watch<ThemeController>();
     final isDark = theme.isDark;
     
-    // ⚡ DECOUPLED METRICS:
-    // 1. Streak = Volatile (Can reset to 1)
     final int streak = int.tryParse((_identityData?['streak'] ?? '0').toString()) ?? 0;
-    // 2. Continuity/Score = Permanent (Lifetime Stability)
     final int continuity = int.tryParse((_identityData?['score'] ?? '0').toString()) ?? 0;
-    
-    // TIER LOGIC (Uses Streak for daily titles)
-    final String timeTier = GenesisLogic.getTitle(streak); 
-    
-    final String hardwareTier = (_identityData?['tier'] ?? 'HARDWARE').toString().toUpperCase();
+    final String tier = (_identityData?['tier'] ?? 'HARDWARE').toString().toUpperCase();
     final String? username = _identityData?['username'];
-
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final subTextColor = isDark ? Colors.white38 : Colors.black38;
-    final cardBg = isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.03);
-    final cardBorder = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.1);
 
     return Scaffold(
       body: Stack(
@@ -167,184 +163,78 @@ class _IdentityCardState extends State<IdentityCard> {
           Positioned.fill(child: CustomPaint(painter: _GridPainter(isDark: isDark))),
           
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: IntrinsicHeight( 
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 16),
-                            // --- HEADER ---
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    _buildStatusBadge(hardwareTier, const Color(0xFF00FFC2)),
-                                    const SizedBox(width: 8),
-                                    _buildStatusBadge(timeTier, subTextColor),
-                                  ],
-                                ),
-                                IconButton(
-                                  onPressed: () {
-                                    HapticFeedback.selectionClick();
-                                    theme.toggle();
-                                  },
-                                  icon: Icon(
-                                    isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, 
-                                    color: isDark ? Colors.white70 : Colors.black54,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
-                            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildStatusBadge(tier, const Color(0xFF00FFC2)),
+                      IconButton(
+                        onPressed: theme.toggle,
+                        icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: Colors.grey),
+                      )
+                    ],
+                  ),
+                  if (username != null) 
+                    Text("@$username", style: GoogleFonts.spaceGrotesk(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
 
-                            if (username != null) ...[
-                              const SizedBox(height: 20),
-                              Text("@$username", 
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 24, 
-                                  fontWeight: FontWeight.bold, 
-                                  letterSpacing: 1,
-                                  color: textColor,
-                                )),
-                            ],
+                  const Spacer(),
 
-                            const Spacer(),
+                  // HERO RING (Now Interactive)
+                  GestureDetector(
+                    onTap: _handleManualTap,
+                    child: GenesisRing(
+                      continuity: continuity,
+                      streak: streak,
+                      isSignaling: _isSignaling,
+                      canTap: _canTap, // Visual cue (Glow if ready)
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  // ACTION LABEL
+                  Text(
+                    _canTap ? "TAP TO VERIFY" : "VERIFIED FOR TODAY",
+                    style: GoogleFonts.inter(
+                      fontSize: 12, 
+                      fontWeight: FontWeight.bold, 
+                      letterSpacing: 2,
+                      color: _canTap ? const Color(0xFF00FFC2) : Colors.grey
+                    ),
+                  ),
 
-                            // --- HERO RING ---
-                            // Pass both metrics:
-                            // continuity -> fills the ring (Stability)
-                            // streak -> passed for potential flair
-                            GenesisRing(
-                              continuity: continuity, 
-                              streak: streak, 
-                              isSignaling: _isSignaling
-                            ),
+                  const Spacer(),
 
-                            const Spacer(),
-
-                            // --- GLASS STATS GRID ---
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: cardBg,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: cardBorder),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  // Show the VOLATILE streak here
-                                  _buildStat("CURRENT STREAK", "$streak", textColor, subTextColor),
-                                  Container(width: 1, height: 30, color: cardBorder),
-                                  // Show the Mining Timer
-                                  _buildStat("PULSE", _nextPulse, textColor, subTextColor),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // --- BATTERY WARNING ---
-                            if (_isBatteryOptimized)
-                              GestureDetector(
-                                onTap: _requestBatteryFix,
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          "SYSTEM RESTRICTION DETECTED\nTap to enable background mining.",
-                                          style: GoogleFonts.inter(
-                                            color: Colors.redAccent, 
-                                            fontSize: 11, 
-                                            fontWeight: FontWeight.bold
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                            const SizedBox(height: 16),
-
-                            // --- LEADERBOARD BUTTON ---
-                            GestureDetector(
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    transitionDuration: const Duration(milliseconds: 600),
-                                    pageBuilder: (_, __, ___) => LeaderboardScreen(myIdentityId: widget.identityId),
-                                    transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: cardBorder),
-                                  borderRadius: BorderRadius.circular(4),
-                                  color: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.black.withValues(alpha: 0.02),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.public, size: 14, color: isDark ? Colors.white70 : Colors.black54),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "VIEW GLOBAL CONSENSUS",
-                                      style: GoogleFonts.inter(
-                                        color: isDark ? Colors.white70 : Colors.black54,
-                                        fontSize: 11,
-                                        letterSpacing: 1.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            const Spacer(),
-                            
-                            // Footer ID
-                            Opacity(
-                              opacity: 0.3,
-                              child: Text(
-                                "NODE_ID: ${widget.identityId.substring(0, 16).toUpperCase()}...", 
-                                style: GoogleFonts.sourceCodePro(
-                                  fontSize: 10, 
-                                  letterSpacing: 1,
-                                  color: textColor,
-                                )
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                        ),
+                  // Stats Footer
+                  _buildStatsRow(streak, isDark),
+                  const SizedBox(height: 32),
+                  
+                  // Leaderboard Button
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => LeaderboardScreen(myIdentityId: widget.identityId)));
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Center(
+                        child: Text("VIEW GLOBAL CONSENSUS", style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.5)),
                       ),
                     ),
                   ),
-                );
-              },
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
         ],
@@ -356,20 +246,31 @@ class _IdentityCardState extends State<IdentityCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.1), // FIXED: withOpacity -> withValues
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)), // FIXED
       ),
       child: Text(text, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: color, letterSpacing: 1)),
     );
   }
 
-  Widget _buildStat(String label, String value, Color textColor, Color subColor) {
+  Widget _buildStatsRow(int streak, bool isDark) {
+    final color = isDark ? Colors.white : Colors.black;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildStat("STREAK", "$streak", color),
+        _buildStat("STATUS", _canTap ? "READY" : "SECURE", _canTap ? const Color(0xFF00FFC2) : Colors.grey),
+      ],
+    );
+  }
+
+  Widget _buildStat(String label, String value, Color color) {
     return Column(
       children: [
-        Text(label, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: subColor, letterSpacing: 2)),
-        const SizedBox(height: 8),
-        Text(value, style: GoogleFonts.spaceGrotesk(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+        Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.spaceGrotesk(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
       ],
     );
   }
