@@ -1,4 +1,3 @@
-// clients/invariant_mobile/lib/screens/identity_card.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,8 +8,6 @@ import '../utils/time_helper.dart';
 import '../widgets/genesis_ring.dart'; 
 import '../theme_manager.dart';
 import '../services/update_service.dart';
-// Note: leaderboard_screen.dart import removed if not used directly, 
-// OR keep it if you navigate to it (which we do below).
 import 'leaderboard_screen.dart'; 
 
 class IdentityCard extends StatefulWidget {
@@ -27,13 +24,12 @@ class _IdentityCardState extends State<IdentityCard> {
   Map<String, dynamic>? _identityData;
   Timer? _refreshTimer;
   bool _isSignaling = false; 
-  bool _canTap = false; // Controls the UI state
+  bool _canTap = false;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
-    // Refresh status every minute to check if 24h cooldown passed
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) => _fetchData());
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,7 +64,6 @@ class _IdentityCardState extends State<IdentityCard> {
     HapticFeedback.lightImpact();
 
     try {
-      // 1. Get Fresh Server Nonce
       final client = InvariantClient();
       final nonce = await client.getHeartbeatChallenge();
       
@@ -77,20 +72,17 @@ class _IdentityCardState extends State<IdentityCard> {
         return;
       }
 
-      // 2. Sign (ID + Nonce + Timestamp)
-      // This matches the Rust backend: payload = "ID|NONCE_HEX|TIMESTAMP"
       String timestamp = TimeHelper.canonicalUtcTimestamp();
       final payload = "${widget.identityId}|$nonce|$timestamp";
       
       final signature = await platform.invokeMethod('signHeartbeat', {'payload': payload});
       final sigBytes = (signature as List<Object?>).map((e) => e as int).toList();
 
-      // 3. Submit
       final success = await client.heartbeat(widget.identityId, sigBytes, nonce, timestamp);
       
       if (success) {
         HapticFeedback.heavyImpact();
-        await _fetchData(); // Refresh UI to show new score/cooldown
+        await _fetchData(); 
         _showSnack("IDENTITY VERIFIED");
       } else {
         _showSnack("VERIFICATION FAILED");
@@ -168,30 +160,44 @@ class _IdentityCardState extends State<IdentityCard> {
               child: Column(
                 children: [
                   const SizedBox(height: 16),
-                  // Header
+                  
+                  // --- HEADER (Badges Restored) ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildStatusBadge(tier, const Color(0xFF00FFC2)),
+                      Row(
+                        children: [
+                          _buildStatusBadge(tier, const Color(0xFF00FFC2)),
+                          const SizedBox(width: 8),
+                          _buildStatusBadge("STREAK: $streak", isDark ? Colors.white54 : Colors.black54),
+                        ],
+                      ),
                       IconButton(
                         onPressed: theme.toggle,
                         icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, color: Colors.grey),
                       )
                     ],
                   ),
+                  
                   if (username != null) 
-                    Text("@$username", style: GoogleFonts.spaceGrotesk(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text("@$username", style: GoogleFonts.spaceGrotesk(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                      ),
+                    ),
 
                   const Spacer(),
 
-                  // HERO RING (Now Interactive)
+                  // HERO RING
                   GestureDetector(
                     onTap: _handleManualTap,
                     child: GenesisRing(
                       continuity: continuity,
                       streak: streak,
                       isSignaling: _isSignaling,
-                      canTap: _canTap, // Visual cue (Glow if ready)
+                      canTap: _canTap, 
                     ),
                   ),
                   
@@ -212,7 +218,7 @@ class _IdentityCardState extends State<IdentityCard> {
 
                   // Stats Footer
                   _buildStatsRow(streak, isDark),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   
                   // Leaderboard Button
                   GestureDetector(
@@ -246,9 +252,9 @@ class _IdentityCardState extends State<IdentityCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1), // FIXED: withOpacity -> withValues
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.2)), // FIXED
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(text, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: color, letterSpacing: 1)),
     );
@@ -259,7 +265,7 @@ class _IdentityCardState extends State<IdentityCard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _buildStat("STREAK", "$streak", color),
+        _buildStat("LIFETIME SCORE", "$streak", color), 
         _buildStat("STATUS", _canTap ? "READY" : "SECURE", _canTap ? const Color(0xFF00FFC2) : Colors.grey),
       ],
     );
@@ -276,6 +282,7 @@ class _IdentityCardState extends State<IdentityCard> {
   }
 }
 
+// 🐛 FIXED: Overflow & Keyboard Issues
 class _UsernameInputForm extends StatefulWidget {
   final String identityId;
   final VoidCallback onSuccess;
@@ -297,8 +304,14 @@ class _UsernameInputFormState extends State<_UsernameInputForm> {
     final text = isDark ? Colors.white : Colors.black;
     final borderColor = isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.1);
 
+    // FIX: Using SingleChildScrollView + viewInsets padding prevents keyboard overflow
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.only(
+        left: 24, 
+        right: 24, 
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24 // Dynamic Padding
+      ),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),

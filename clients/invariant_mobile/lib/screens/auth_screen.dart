@@ -1,4 +1,3 @@
-// clients/invariant_mobile/lib/screens/auth_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -43,16 +42,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         localizedReason: 'Generate Identity Key',
         options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true),
       );
-      if (didAuth) await _generateIdentity();
+      if (didAuth) await _performGenesisOrRecovery();
     } on PlatformException catch (e) {
       setState(() => _status = "AUTH ERROR: ${e.message}");
     }
   }
 
-  Future<void> _generateIdentity() async {
-    setState(() { _isLoading = true; _status = "FETCHING CHALLENGE..."; });
+  Future<void> _performGenesisOrRecovery() async {
+    setState(() { _isLoading = true; _status = "CONNECTING..."; });
 
     try {
+      // 1. Get Nonce
       final nonce = await client.getGenesisChallenge();
       if (nonce == null) {
          setState(() => _status = "SERVER UNREACHABLE");
@@ -60,14 +60,27 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
          return;
       }
 
-      setState(() => _status = "FORGING HARDWARE KEY...");
-      final result = await platform.invokeMethod('generateIdentity', {'nonce': nonce});
+      // 2. CHECK FOR EXISTING KEY (Recovery Mode)
+      final bool hasKey = await platform.invokeMethod('hasIdentity');
+      Map<Object?, Object?> data;
+
+      if (hasKey) {
+        setState(() => _status = "RECOVERING HARDWARE KEY...");
+        // Non-destructive recovery
+        data = await platform.invokeMethod('recoverIdentity');
+      } else {
+        setState(() => _status = "FORGING NEW KEY...");
+        // Destructive generation
+        data = await platform.invokeMethod('generateIdentity', {'nonce': nonce});
+      }
       
-      final Map<Object?, Object?> data = result;
       final pkBytes = (data['publicKey'] as List<Object?>).map((e) => e as int).toList();
       final chainBytes = (data['attestationChain'] as List<Object?>).map((c) => (c as List<Object?>).map((b) => b as int).toList()).toList();
 
-      setState(() => _status = "SUBMITTING PROOF...");
+      setState(() => _status = "SYNCING WITH NODE...");
+      
+      // 3. Register/Recover on Server
+      // If DB was wiped, server sees this as a new registration of an existing key.
       final String? identityId = await client.genesis(pkBytes, chainBytes, nonce);
       
       if (identityId != null) {
@@ -79,7 +92,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           );
         }
       } else {
-        setState(() => _status = "SERVER REJECTED ATTESTATION");
+        setState(() => _status = "SERVER REJECTED PROOF");
       }
     } catch (e) {
       setState(() => _status = "ERROR: $e");
@@ -108,8 +121,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                         width: 120, height: 120,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5), width: 2), // FIXED
-                          boxShadow: [BoxShadow(color: Colors.cyan.withValues(alpha: 0.2), blurRadius: 30, spreadRadius: 10)], // FIXED
+                          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5), width: 2),
+                          boxShadow: [BoxShadow(color: Colors.cyan.withValues(alpha: 0.2), blurRadius: 30, spreadRadius: 10)],
                         ),
                         child: const Icon(Icons.fingerprint, size: 60, color: Colors.cyanAccent),
                       ),

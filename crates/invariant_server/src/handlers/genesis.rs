@@ -20,6 +20,8 @@ const CONFIG_KEY_PAUSED: &str = "invariant:config:genesis_paused";
 const MAX_GENESIS_PER_HOUR: i64 = 100;
 
 /// 🛡️ REDIS RATE LIMITER
+/// Uses the "Fixed Window" algorithm with atomic increments.
+/// Returns TRUE if the request is allowed, FALSE if blocked.
 async fn check_rate_limit(redis: &mut redis::aio::MultiplexedConnection, ip: &str) -> bool {
     let key = format!("rate_limit:genesis:{}", ip);
     
@@ -103,6 +105,7 @@ pub async fn get_challenge_handler(
         (status = 503, description = "Genesis Paused")
     )
 )]
+// 🛠️ FIX: Removed `ret` from instrument to prevent JSON serialization crash
 #[instrument(skip(state, payload))]
 pub async fn genesis_handler(
     Extension(state): Extension<SharedState>,
@@ -196,7 +199,7 @@ pub async fn verify_stateless_handler(
                 "verified": false,
                 "tier": "REJECTED",
                 "error": e.to_string(),
-                "risk_score": 100.0 
+                "risk_score": 100.0 // 100.0 = High Risk / Emulator
             }))))
         }
     }
