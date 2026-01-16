@@ -1,7 +1,9 @@
+# invariant_sdk/pubspec.yaml
 name: invariant_sdk
-description: "Hardware-backed device verification and fraud filtering."
+description: "Hardware-backed device verification and fraud filtering for the Invariant Protocol."
 version: 1.0.4
-homepage: https://invariant.tech
+homepage: https://invariantprotocol.com/docs
+repository: https://github.com/KarmaYama/invariant-monorepo/tree/main/invariant_sdk
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -10,7 +12,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # Add this:
   http: ^1.2.0 
   plugin_platform_interface: ^2.0.2
 

@@ -1,16 +1,20 @@
-# invariant_sdk_example
+# Invariant SDK
 
-Demonstrates how to use the invariant_sdk plugin.
+**Stop Automated Identity Abuse at the Hardware Layer.**
 
-## Getting Started
+The Invariant SDK provides a cryptographic interface to the Android Keystore and StrongBox Secure Element. It allows mobile applications to verify that a client is a physical, uncompromised device—not an emulator, server farm, or scripted bot.
 
-This project is a starting point for a Flutter application.
+## ⚡ Key Features
 
-A few resources to get you started if this is your first Flutter project:
+- **Hardware Attestation:** Deterministic proof that a key lives in the device's Trusted Execution Environment (TEE).
+- **Sybil Resistance:** Elevates the marginal cost of fake account creation from $0.00 to the cost of a physical smartphone.
+- **Zero PII:** No biometrics, phone numbers, or emails are collected. We verify the *silicon*, not the *user*.
+- **Shadow Mode:** Audit your traffic quality silently before enforcing security policies.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 🚀 Installation
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Add the dependency to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  invariant_sdk: ^1.0.4

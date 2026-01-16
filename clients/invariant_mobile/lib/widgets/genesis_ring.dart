@@ -27,12 +27,14 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
+    // Very slow rotation = Stability
     _rotationController = AnimationController(
-      vsync: this, duration: const Duration(seconds: 20)
+      vsync: this, duration: const Duration(seconds: 60) 
     )..repeat();
 
+    // Subtle breathing only when action is required
     _pulseController = AnimationController(
-      vsync: this, duration: const Duration(seconds: 3), 
+      vsync: this, duration: const Duration(seconds: 4), 
       lowerBound: 0.0, upperBound: 1.0
     )..repeat(reverse: true);
   }
@@ -47,7 +49,9 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = widget.canTap ? const Color(0xFF00FFC2) : Colors.grey; 
+    
+    // Green/Cyan for Secure (Done), Amber for Pending (Action Required)
+    final accent = widget.canTap ? const Color(0xFFFFD700) : const Color(0xFF00FFC2); 
     final double progress = (widget.continuity / 84).clamp(0.0, 1.0);
 
     return SizedBox(
@@ -56,32 +60,38 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // 1. Halo
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 500),
-            width: 180, height: 180,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: widget.canTap ? 0.2 : 0.05), // FIXED
-                  blurRadius: widget.canTap ? 60 : 30,
-                  spreadRadius: widget.canTap ? 10 : 5
-                )
-              ],
+          // 1. Halo (Visible only when action needed)
+          if (widget.canTap)
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                return Container(
+                  width: 180 + (_pulseController.value * 20),
+                  height: 180 + (_pulseController.value * 20),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.15), 
+                        blurRadius: 40,
+                        spreadRadius: 2
+                      )
+                    ],
+                  ),
+                );
+              }
             ),
-          ),
 
-          // 2. HUD
+          // 2. HUD (Technical Lines)
           RotationTransition(
             turns: _rotationController,
             child: CustomPaint(
               size: const Size(300, 300), 
-              painter: _HudPainter(color: isDark ? Colors.white12 : Colors.black12)
+              painter: _HudPainter(color: isDark ? Colors.white10 : Colors.black12)
             ),
           ),
 
-          // 3. Track
+          // 3. Track (Progress)
           CustomPaint(
             size: const Size(240, 240),
             painter: _TrackPainter(
@@ -89,13 +99,13 @@ class _GenesisRingState extends State<GenesisRing> with TickerProviderStateMixin
               color: accent, 
               isDark: isDark, 
               isSignaling: widget.isSignaling,
-              pulse: _pulseController.value
+              pulse: widget.canTap ? _pulseController.value : 0.0 // Only pulse if pending
             ),
           ),
 
-          // 4. Center Icon
+          // 4. Center Icon (State)
           Icon(
-            widget.canTap ? Icons.touch_app : Icons.verified_user,
+            widget.canTap ? Icons.fingerprint : Icons.shield_outlined,
             size: 44,
             color: widget.isSignaling ? Colors.white : accent
           ),
@@ -126,25 +136,22 @@ class _TrackPainter extends CustomPainter {
     final radius = size.width / 2;
     final rect = Rect.fromCircle(center: center, radius: radius);
 
+    // Background Track (Thin)
     final bgPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..color = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05); // FIXED
+      ..strokeWidth = 2
+      ..color = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05);
     canvas.drawCircle(center, radius, bgPaint);
 
-    final activeWidth = isSignaling ? 16.0 : (14.0 + (pulse * 1.5));
+    // Active Track
+    // If signaling, it constricts (visual feedback)
+    final activeWidth = isSignaling ? 8.0 : (4.0 + (pulse * 2));
     
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = activeWidth
-      ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        startAngle: -pi / 2,
-        endAngle: 3 * pi / 2,
-        colors: [color.withValues(alpha: 0.3), color], // FIXED
-        stops: const [0.0, 1.0],
-        transform: const GradientRotation(-pi / 2),
-      ).createShader(rect);
+      ..strokeCap = StrokeCap.butt // Mechanical feel
+      ..color = color.withValues(alpha: isSignaling ? 1.0 : 0.8);
 
     canvas.drawArc(rect, -pi / 2, 2 * pi * progress, false, paint);
   }
@@ -159,14 +166,13 @@ class _HudPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.5;
+    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.0;
     final radius = size.width / 2;
     final center = Offset(size.width / 2, size.height / 2);
 
-    for (var i = 0; i < 60; i++) {
-      final angle = (i * 6) * pi / 180;
-      final length = i % 5 == 0 ? 12.0 : 4.0;
-      final p1 = Offset(center.dx + (radius - length) * cos(angle), center.dy + (radius - length) * sin(angle));
+    for (var i = 0; i < 12; i++) { // Fewer lines, cleaner
+      final angle = (i * 30) * pi / 180;
+      final p1 = Offset(center.dx + (radius - 10) * cos(angle), center.dy + (radius - 10) * sin(angle));
       final p2 = Offset(center.dx + radius * cos(angle), center.dy + radius * sin(angle));
       canvas.drawLine(p1, p2, paint);
     }

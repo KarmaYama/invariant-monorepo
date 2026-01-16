@@ -16,21 +16,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  // DESIGN PROMPT ALIGNED COPY
   final List<Map<String, String>> _pages = [
     {
-      "title": "PROOF OF\nDEVICE",
-      "body": "Invariant anchors your identity to the secure silicon in your phone.",
-      "icon": "shield"
+      "title": "PERSISTENT\nIDENTITY",
+      "body": "Invariant is a digital anchor. It exists whether you open the app or not.",
+      "icon": "anchor" // Icons.anchor
     },
     {
-      "title": "DAILY\nVERIFICATION",
-      "body": "Tap once every 24 hours to prove your existence and build your reputation score.",
-      "icon": "fingerprint" // Changed from 'bolt' to 'fingerprint'
+      "title": "HARDWARE\nBACKED",
+      "body": "Your identity is cryptographically bound to the secure silicon in this device.",
+      "icon": "chip" // Icons.memory
     },
     {
-      "title": "GENESIS\nCOHORT",
-      "body": "Join the Testnet. Maintain your streak to be included in the Genesis Block.",
-      "icon": "diamond"
+      "title": "DAILY\nCONFIRMATION",
+      "body": "Confirm your presence once every 24 hours to maintain your verifiable identity.",
+      "icon": "fingerprint" // Icons.fingerprint
     },
   ];
 
@@ -40,7 +41,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    // Only notification permission needed now
     await Permission.notification.request();
   }
 
@@ -66,14 +66,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  // ... [Keep build method mostly same, just updating indicator logic] ...
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // ... Background ...
           SafeArea(
             child: Column(
               children: [
@@ -117,7 +115,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           foregroundColor: Colors.black,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
                         ),
-                        child: Text(_currentPage == 2 ? "START" : "NEXT", style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
+                        child: Text(_currentPage == 2 ? "INITIALIZE" : "NEXT", style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -131,7 +129,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// ... [Keep _AnimatedPageContent same] ...
 class _AnimatedPageContent extends StatelessWidget {
   final bool isActive;
   final Map<String, String> data;
@@ -142,22 +139,23 @@ class _AnimatedPageContent extends StatelessWidget {
   Widget build(BuildContext context) {
     IconData icon;
     switch(data['icon']) {
-      case 'shield': icon = Icons.shield_outlined; break;
+      case 'anchor': icon = Icons.anchor; break;
+      case 'chip': icon = Icons.memory; break;
       case 'fingerprint': icon = Icons.fingerprint; break;
-      default: icon = Icons.diamond_outlined; break;
+      default: icon = Icons.shield_outlined; break;
     }
-    // ... [Rest of widget same as before] ...
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 48, color: const Color(0xFF00FFC2)),
+          Icon(icon, size: 64, color: const Color(0xFF00FFC2)),
           const SizedBox(height: 48),
           Text(data['title']!, style: GoogleFonts.spaceGrotesk(color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
-          Text(data['body']!, style: GoogleFonts.inter(color: Colors.white70, fontSize: 16)),
+          Text(data['body']!, style: GoogleFonts.inter(color: Colors.white70, fontSize: 16, height: 1.5)),
         ],
       ),
     );

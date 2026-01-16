@@ -1,241 +1,226 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { 
-  ShieldCheck, Terminal, Cpu, Activity, ChevronRight, 
-  Smartphone, Zap, Lock, Code2, LineChart 
-} from "lucide-react";
+import { Shield, Fingerprint, Lock, ChevronRight, CheckCircle2, Smartphone, Terminal, Code2 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { fetchNetworkStats } from "@/lib/api";
-
-const COST_PER_NODE = 150; 
+import Link from "next/link";
 
 export default function Landing() {
-  const [stats, setStats] = useState({
-    continuity: 0,
-    anchors: 0,
-    status: "SYNCING...",
-    forgeryCost: 0
-  });
-
-  useEffect(() => {
-    async function load() {
-      const data = await fetchNetworkStats();
-      const realAnchors = data.activeAnchors || 0;
-      const calculatedCost = realAnchors * COST_PER_NODE;
-
-      setStats({
-        continuity: data.continuityHeight,
-        anchors: realAnchors,
-        status: data.status,
-        forgeryCost: calculatedCost
-      });
-    }
-    load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-[#00FFC2] selection:text-black font-sans overflow-hidden flex flex-col">
       <Header />
       
-      <main className="grow pt-32">
-        <div className="relative z-10 max-w-7xl mx-auto px-6">
-          
-          {/* HERO SECTION */}
+      <main className="grow">
+        
+        {/* --- HERO SECTION: The Proposition --- */}
+        <section className="relative pt-40 pb-32 px-6 max-w-7xl mx-auto">
+          {/* Background Glow */}
+          <div className="absolute top-0 right-0 w-125 h-125 bg-[#00FFC2] opacity-[0.03] blur-[120px] rounded-full pointer-events-none" />
+
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="border-b border-white/10 pb-12 mb-12"
           >
-            <div className="flex items-center space-x-3 mb-6">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FFC2] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#00FFC2]"></span>
-              </span>
-              <span className="font-mono text-xs text-[#00FFC2] tracking-[0.2em] font-bold">TESTNET V1 LIVE</span>
+            <div className="inline-flex items-center gap-2 border border-white/10 bg-white/5 px-4 py-1.5 rounded-full mb-8">
+              <span className="w-2 h-2 bg-[#00FFC2] rounded-full shadow-[0_0_10px_#00FFC2]" />
+              <span className="text-xs font-medium tracking-wide text-white/80">Public Pilot Live</span>
             </div>
-            
-            <h1 className="text-6xl md:text-8xl font-serif tracking-tight mb-8 leading-none">
-              Identity, <br/> Anchored to <span className="text-[#00FFC2]">Device.</span>
+
+            <h1 className="text-5xl md:text-8xl font-serif tracking-tight mb-8 leading-[1.1] text-white">
+              The End of <br />
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-white to-white/50">Impersonation.</span>
             </h1>
             
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
-              <p className="text-lg md:text-2xl text-white/60 max-w-2xl font-light leading-relaxed">
-                Block botnets at source by verifying the Secure Enclave in smartphones. <br/>
-                No PII, no biometrics — just deterministic device attestation.
-              </p>
-              
-              {/* --- ACTION LINKS --- */}
-              <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
-                <a 
-                  href="/pilot" 
-                  data-analytics-id="hero_cta_pilot"
-                  className="group relative flex items-center justify-center space-x-3 bg-[#00FFC2] text-black px-8 py-4 rounded font-mono font-bold text-sm tracking-wide hover:bg-[#00FFC2]/90 hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,194,0.3)]"
-                >
-                  <Smartphone size={18} />
-                  <span>Join Pilot</span>
-                </a>
-                <a 
-                  href="/docs" 
-                  data-analytics-id="hero_cta_docs"
-                  className="group flex items-center justify-center space-x-2 px-6 py-4 border border-white/20 rounded hover:border-white hover:bg-white/5 transition-all"
-                >
-                  <span className="font-mono text-sm text-white font-bold">Integrate SDK</span>
-                  <ChevronRight className="text-white/60 group-hover:text-white group-hover:translate-x-1 transition-transform" size={16} />
-                </a>
-              </div>
+            <p className="text-xl md:text-2xl text-white/50 max-w-2xl font-light leading-relaxed mb-12">
+              Software identity is broken. Invariant binds digital accounts to <span className="text-white">physical devices</span>, making mass-scale fraud mathematically impossible.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-6">
+              <Link 
+                href="/pilot" 
+                className="bg-[#00FFC2] text-black px-8 py-4 rounded-sm font-semibold text-lg hover:bg-[#00FFC2]/90 transition-all flex items-center justify-center gap-3"
+              >
+                <Smartphone size={20} />
+                Get Verified
+              </Link>
+              <Link 
+                href="/impact" 
+                className="border border-white/20 text-white px-8 py-4 rounded-sm font-medium text-lg hover:bg-white/5 transition-all flex items-center justify-center gap-3"
+              >
+                Why It Matters
+                <ChevronRight size={18} className="opacity-60" />
+              </Link>
             </div>
           </motion.div>
+        </section>
 
-          {/* TRUST WEDGE */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24 opacity-80">
-            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
-              <ShieldCheck size={16} className="text-[#00FFC2]" />
-              <span>TESTNET V1 • 20+ ACTIVE NODES</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
-              <Lock size={16} className="text-[#00FFC2]" />
-              <span>ZERO PII: NO GPS • NO CONTACTS</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm font-mono text-white/80">
-              <Zap size={16} className="text-[#00FFC2]" />
-              <span>&lt;200ms VERIFICATION (TYPICAL)</span>
-            </div>
-          </div>
-
-          {/* DYNAMIC METRICS */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-white/10 border border-white/10 mb-32">
-            <MetricCard 
-              icon={<Activity size={18} />}
-              label="CONTINUITY HEIGHT" 
-              value={stats.continuity > 0 ? stats.continuity.toLocaleString() : "---"} 
-              font="mono"
+        {/* --- TRUST SIGNALS: The "Why" --- */}
+        <section className="border-y border-white/5 bg-white/2">
+          <div className="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-12">
+            <Feature 
+              icon={<Shield size={24} className="text-[#00FFC2]" />}
+              title="Hardware Locked"
+              desc="We don't check passwords. We check the Secure Enclave chip inside the phone. It cannot be faked by AI."
             />
-            <MetricCard 
-              icon={<ShieldCheck size={18} />}
-              label="VERIFIED ANCHORS" 
-              value={stats.anchors > 0 ? stats.anchors.toString() : "---"} 
-              font="mono"
+            <Feature 
+              icon={<Fingerprint size={24} className="text-[#00FFC2]" />}
+              title="Zero Personal Data"
+              desc="No names. No biometrics. No phone numbers. We verify the device hardware, never the user's private life."
             />
-            <MetricCard 
-              icon={<Cpu size={18} />}
-              label="FORGERY COST" 
-              value={stats.forgeryCost > 0 ? `$${stats.forgeryCost.toLocaleString()}` : "---"} 
-              sub="USD"
-            />
-            <MetricCard 
-              icon={<Terminal size={18} />}
-              label="NETWORK STATUS" 
-              value={stats.status}
-              color={stats.status === 'HEALTHY' ? "text-[#00FFC2]" : "text-amber-500"}
+            <Feature 
+              icon={<Lock size={24} className="text-[#00FFC2]" />}
+              title="Instant Killswitch"
+              desc="If a device is stolen, its identity is revoked instantly. The physical thief gets a brick, not your access."
             />
           </div>
+        </section>
 
-          {/* SEGMENTATION: REORDERED FOR IMPACT */}
-          <div className="mb-32">
-            <h2 className="text-sm font-mono text-[#00FFC2] mb-12 tracking-widest uppercase">Choose Your Interface</h2>
-            <div className="grid md:grid-cols-3 gap-8">
+        {/* --- PROBLEM/SOLUTION: The Story --- */}
+        <section className="py-32 px-6 max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-20 items-center">
+            <div>
+              <h2 className="text-4xl md:text-5xl font-serif mb-8 leading-tight">
+                The internet was built <br/> without a <span className="text-[#00FFC2]">Body.</span>
+              </h2>
+              <div className="space-y-6 text-lg text-white/60 font-light">
+                <p>
+                  Today, a scammer can create 10,000 fake accounts for $5 using AI tools. They can impersonate your CEO, your bank, or your hiring manager.
+                </p>
+                <p>
+                  Old defenses (SMS, Email, CAPTCHA) are failing.
+                </p>
+                <p className="text-white border-l-2 border-[#00FFC2] pl-6 py-2">
+                  Invariant changes the rules. To create a fake identity on our network, an attacker must buy a physical smartphone. 
+                  <br/><br/>
+                  <strong>We raised the cost of fraud from $0.00 to $150.00 per attempt.</strong>
+                </p>
+              </div>
+            </div>
+            
+            {/* Visual Abstract: The Shield */}
+            <div className="relative h-125 w-full bg-white/5 rounded-2xl border border-white/10 overflow-hidden flex items-center justify-center">
+              <div className="absolute inset-0 bg-linear-to-tr from-[#00FFC2]/10 to-transparent opacity-50" />
+              <div className="text-center space-y-6 relative z-10">
+                <div className="w-24 h-24 bg-[#00FFC2]/10 rounded-full flex items-center justify-center mx-auto border border-[#00FFC2]/30 backdrop-blur-md">
+                  <Shield size={48} className="text-[#00FFC2]" />
+                </div>
+                <div>
+                  <div className="text-2xl font-serif text-white">Status: Secure</div>
+                  <div className="text-white/40 font-mono text-sm mt-2">DEVICE ID: 8A2...99F</div>
+                </div>
+                <div className="flex gap-2 justify-center mt-4">
+                  <Badge text="TITANIUM TIER" />
+                  <Badge text="HARDWARE BOUND" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* --- NEW SECTION: FOR DEVELOPERS --- */}
+        <section className="py-32 px-6 border-t border-white/10 bg-[#0A0A0A]">
+          <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+            
+            {/* Left: Pitch */}
+            <div>
+              <div className="flex items-center gap-2 mb-6">
+                <Terminal size={20} className="text-[#00FFC2]" />
+                <span className="font-mono text-xs text-[#00FFC2] tracking-widest uppercase">For Builders</span>
+              </div>
+              <h2 className="text-4xl font-serif mb-6 text-white">
+                Integration takes <br/> less than 15 minutes.
+              </h2>
+              <p className="text-white/50 text-lg font-light leading-relaxed mb-8">
+                Don't build your own fraud detection. Invariant provides a simple SDK that returns a deterministic <code>riskTier</code> for every device.
+              </p>
               
-              {/* 1. ENTERPRISE (Left) */}
-              <div className="group p-8 border border-white/10 bg-white/5 rounded-lg hover:border-[#00FFC2]/30 transition-all">
-                <LineChart className="text-white/40 mb-6 group-hover:text-[#00FFC2] transition-colors" size={32} />
-                <h3 className="text-2xl font-serif text-white mb-4">Enterprise & Security</h3>
-                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
-                  Stop bleeding ad spend to bots. Filter non-hardware-backed traffic before it hits your signup flow.
-                </p>
-                <ul className="space-y-3 mb-8">
-                  <ListItem text="Slash fraud ops costs" />
-                  <ListItem text="Protect referral budgets" />
-                  <ListItem text="No user friction added" />
-                </ul>
-                <a 
-                  href="/impact" 
-                  data-analytics-id="segment_cta_enterprise"
-                  className="text-[#00FFC2] font-mono text-xs font-bold border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 uppercase"
-                >
-                  View Fraud Models
-                </a>
-              </div>
+              <ul className="space-y-4 mb-10">
+                <DevFeature text="Flutter & Native Android SDKs" />
+                <DevFeature text="Shadow Mode (Non-blocking analytics)" />
+                <DevFeature text="Zero PII (GDPR Compliant by default)" />
+              </ul>
 
-              {/* 2. FOUNDING NODES (Center - Highlighted) */}
-              <div className="group p-8 border border-[#00FFC2]/20 bg-white/5 rounded-lg hover:border-[#00FFC2] transition-all relative overflow-hidden transform md:-translate-y-4 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-                <div className="absolute top-0 right-0 bg-[#00FFC2] text-black text-[10px] font-bold px-3 py-1 font-mono">RECRUITING</div>
-                <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-[#00FFC2] to-transparent opacity-50"></div>
-                
-                <Smartphone className="text-[#00FFC2] mb-6" size={32} />
-                <h3 className="text-2xl font-serif text-white mb-4">Founding Nodes</h3>
-                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
-                  Your phone is the anchor. Run the node to secure the graph and earn Genesis status.
-                </p>
-                <ul className="space-y-3 mb-8">
-                  <ListItem text="Zero daily tasks" />
-                  <ListItem text="<1% Battery usage" />
-                  <ListItem text="Permanent Genesis Badge" />
-                </ul>
-                <a 
-                  href="/pilot" 
-                  data-analytics-id="segment_cta_pilot"
-                  className="inline-block bg-[#00FFC2] text-black px-6 py-3 rounded font-mono text-xs font-bold hover:bg-[#00FFC2]/90 transition-colors uppercase"
-                >
-                  Deploy Node
-                </a>
-              </div>
-
-              {/* 3. DEVELOPER (Right) */}
-              <div className="group p-8 border border-white/10 bg-white/5 rounded-lg hover:border-[#00FFC2]/30 transition-all">
-                <Code2 className="text-white/40 mb-6 group-hover:text-[#00FFC2] transition-colors" size={32} />
-                <h3 className="text-2xl font-serif text-white mb-4">Developers</h3>
-                <p className="text-white/60 text-sm leading-relaxed mb-8 h-20">
-                  Integrate "Proof of Device" with 3 lines of code. Run in Shadow Mode to audit your traffic quality silently.
-                </p>
-                <ul className="space-y-3 mb-8">
-                  <ListItem text="Flutter & Native SDKs" />
-                  <ListItem text="15-minute integration" />
-                  <ListItem text="Shadow Mode (Non-blocking)" />
-                </ul>
-                <a 
-                  href="/docs" 
-                  data-analytics-id="segment_cta_dev"
-                  className="text-[#00FFC2] font-mono text-xs font-bold border-b border-[#00FFC2]/30 hover:border-[#00FFC2] pb-1 uppercase"
-                >
-                  Read Documentation
-                </a>
-              </div>
-
+              <Link 
+                href="/docs" 
+                className="group inline-flex items-center text-white border-b border-white/30 pb-1 hover:border-[#00FFC2] hover:text-[#00FFC2] transition-colors"
+              >
+                <span className="font-mono text-sm mr-2">READ DOCUMENTATION</span>
+                <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
             </div>
+
+            {/* Right: Code Snippet Visual */}
+            <div className="bg-[#050505] border border-white/10 rounded-lg p-6 font-mono text-sm relative group hover:border-white/20 transition-colors shadow-2xl">
+              <div className="absolute top-4 right-4 flex gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500/20" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500/20" />
+                <div className="w-3 h-3 rounded-full bg-green-500/20" />
+              </div>
+              <div className="text-white/30 mb-4 select-none">// auth_controller.dart</div>
+              <div className="space-y-2">
+                <div className="text-purple-400">final<span className="text-white"> result = </span><span className="text-blue-400">await</span><span className="text-white"> Invariant.verify();</span></div>
+                <div className="text-white">&nbsp;</div>
+                <div className="text-purple-400">if<span className="text-white"> (result.riskTier == </span><span className="text-green-400">'STRONGBOX'</span><span className="text-white">) {'{'}</span></div>
+                <div className="text-white pl-4"><span className="text-white/50">// Hardware-backed. Allow transaction.</span></div>
+                <div className="text-white pl-4">processPayment();</div>
+                <div className="text-white">{'}'} <span className="text-purple-400">else</span> {'{'}</div>
+                <div className="text-white pl-4"><span className="text-white/50">// Emulator or Rooted. Block.</span></div>
+                <div className="text-white pl-4">throw <span className="text-yellow-400">SecurityException</span>();</div>
+                <div className="text-white">{'}'}</div>
+              </div>
+            </div>
+
           </div>
+        </section>
 
-        </div>
+        {/* --- CTA: The Invite --- */}
+        <section className="py-24 px-6 text-center border-t border-white/10">
+          <h2 className="text-4xl font-serif mb-6">Secure your digital existence.</h2>
+          <p className="text-white/50 max-w-lg mx-auto mb-10 text-lg">
+            Join the Pilot. Establish your hardware anchor today.
+          </p>
+          <Link 
+            href="/pilot" 
+            className="inline-block border-b border-[#00FFC2] text-[#00FFC2] pb-1 text-xl hover:text-white hover:border-white transition-colors"
+          >
+            Start Verification Process →
+          </Link>
+        </section>
+
       </main>
-
       <Footer />
     </div>
   );
 }
 
-function MetricCard({ label, value, sub, color = "text-white", icon, font = "sans" }: any) {
+function Feature({ icon, title, desc }: any) {
   return (
-    <div className="bg-[#050505] p-8 hover:bg-white/5 transition-colors group">
-      <div className="flex items-center justify-between mb-6 opacity-40 group-hover:opacity-100 transition-opacity">
-        <span className="text-[10px] tracking-[0.2em] font-mono">{label}</span>
+    <div className="group">
+      <div className="mb-6 p-4 bg-white/5 w-fit rounded-lg border border-white/10 group-hover:border-[#00FFC2]/50 transition-colors">
         {icon}
       </div>
-      <div className={`text-3xl ${color} ${font === 'mono' ? 'font-mono tracking-tighter' : 'font-serif'}`}>
-        {value} <span className="text-sm text-white/40 ml-1 font-sans">{sub}</span>
-      </div>
+      <h3 className="text-xl font-serif text-white mb-3">{title}</h3>
+      <p className="text-white/50 leading-relaxed font-light">
+        {desc}
+      </p>
     </div>
   );
 }
 
-function ListItem({ text }: { text: string }) {
+function Badge({ text }: { text: string }) {
   return (
-    <li className="flex items-center text-sm text-white/80 font-light">
-      <div className="w-1 h-1 bg-[#00FFC2] rounded-full mr-3" />
+    <span className="px-3 py-1 rounded bg-[#00FFC2]/10 border border-[#00FFC2]/20 text-[#00FFC2] text-[10px] font-bold tracking-wider">
+      {text}
+    </span>
+  );
+}
+
+function DevFeature({ text }: { text: string }) {
+  return (
+    <li className="flex items-center gap-3 text-white/70 font-light text-sm">
+      <CheckCircle2 size={16} className="text-[#00FFC2] shrink-0" />
       {text}
     </li>
   );

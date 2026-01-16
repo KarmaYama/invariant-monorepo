@@ -1,13 +1,6 @@
-/*
- * Copyright (c) 2026 Invariant Protocol.
- *
- * This source code is licensed under the Business Source License (BSL 1.1) 
- * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
- */
+// invariant_sdk/example/lib/main.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:invariant_sdk/invariant_sdk.dart';
 import 'dart:async';
 
@@ -44,13 +37,10 @@ class TerminalScreen extends StatefulWidget {
 }
 
 class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProviderStateMixin {
-  // State
   String _riskTier = 'WAITING_FOR_SIGNAL';
   bool _isVerified = false;
   bool _isLoading = false;
   final List<String> _logs = [];
-  
-  // Animation
   late AnimationController _pulseController;
 
   @override
@@ -62,8 +52,9 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
     )..repeat(reverse: true);
 
     _log("SYSTEM_BOOT", "Initializing Invariant SDK...");
-    Invariant.initialize(apiKey: "sk_test_demo_key");
-    _log("SDK", "Ready. Waiting for user input.");
+    // Pilot initialization using the demo identifier
+    Invariant.initialize(apiKey: "pilot_v1_evaluation");
+    _log("SDK", "Ready. Hardware handshake available.");
   }
 
   @override
@@ -85,11 +76,8 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
       _riskTier = "ANALYZING...";
     });
     
-    // Simulate steps for dramatic effect
-    _log("NET", "Requesting Cryptographic Nonce...");
-    await Future.delayed(const Duration(milliseconds: 400)); 
-
-    _log("TEE", "Accessing Secure Enclave (StrongBox)...");
+    _log("NET", "Requesting Fresh Nonce...");
+    _log("TEE", "Invoking Hardware Secure Enclave...");
     
     try {
       final startTime = DateTime.now();
@@ -99,10 +87,10 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
       if (!mounted) return;
 
       if (result.isVerified) {
-        _log("SUCCESS", "Attestation Chain Validated (${duration}ms)");
-        _log("RISK_ENGINE", "Tier: ${result.riskTier}");
+        _log("SUCCESS", "Handshake Verified (${duration}ms)");
+        _log("RISK_ENGINE", "Tier: ${result.riskTier} (Score: ${result.riskScore})");
       } else {
-        _log("FAILURE", "Verification Rejected. Risk Tier: ${result.riskTier}");
+        _log("REJECTED", "Verification Failed: ${result.riskTier}");
       }
 
       setState(() {
@@ -112,9 +100,9 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
       });
 
     } catch (e) {
-      _log("ERROR", e.toString());
+      _log("CRITICAL", e.toString());
       setState(() {
-        _riskTier = "SYSTEM_ERROR";
+        _riskTier = "FAULT";
         _isLoading = false;
       });
     }
@@ -122,7 +110,7 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final color = _isLoading 
+    final statusColor = _isLoading 
         ? Colors.white 
         : (_isVerified ? const Color(0xFF00FFC2) : Colors.redAccent);
 
@@ -138,7 +126,7 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "SHADOW FILTER // v1.0.4",
+                    "INVARIANT // SHADOW FILTER",
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
@@ -149,10 +137,9 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
                   Container(
                     width: 8, height: 8,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00FFC2),
+                      color: statusColor,
                       shape: BoxShape.circle,
-                      // FIXED: .withOpacity -> .withValues
-                      boxShadow: [BoxShadow(color: const Color(0xFF00FFC2).withValues(alpha: 0.5), blurRadius: 10)]
+                      boxShadow: [BoxShadow(color: statusColor.withValues(alpha: 0.5), blurRadius: 10)]
                     ),
                   )
                 ],
@@ -160,7 +147,7 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
               
               const Spacer(),
 
-              // --- MAIN STATUS ---
+              // --- VISUAL INDICATOR ---
               Center(
                 child: Column(
                   children: [
@@ -172,23 +159,14 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              // FIXED: .withOpacity -> .withValues
-                              color: color.withValues(alpha: _isLoading ? _pulseController.value : 0.5),
+                              color: statusColor.withValues(alpha: _isLoading ? _pulseController.value : 0.5),
                               width: 2
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                // FIXED: .withOpacity -> .withValues
-                                color: color.withValues(alpha: 0.1),
-                                blurRadius: 30,
-                                spreadRadius: 10
-                              )
-                            ]
                           ),
                           child: Icon(
-                            _isVerified ? Icons.shield : Icons.lock_outline, 
+                            _isVerified ? Icons.security : Icons.lock_open_rounded, 
                             size: 64, 
-                            color: color
+                            color: statusColor
                           ),
                         );
                       },
@@ -200,14 +178,14 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
                         fontFamily: 'monospace',
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: color,
+                        color: statusColor,
                         letterSpacing: 1.5,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      _isLoading ? "ESTABLISHING HARDWARE TRUST..." : "DEVICE CLASSIFICATION",
-                      style: const TextStyle(
+                    const Text(
+                      "HARDWARE CLASSIFICATION",
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 10,
                         color: Colors.white38,
@@ -220,9 +198,9 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
 
               const Spacer(),
 
-              // --- CONSOLE LOG ---
+              // --- REAL-TIME LOGS ---
               Container(
-                height: 150,
+                height: 180,
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -236,14 +214,14 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
                   itemBuilder: (context, index) {
                     final log = _logs[(_logs.length - 1) - index];
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0),
+                      padding: const EdgeInsets.only(bottom: 6.0),
                       child: Text(
                         log,
                         style: TextStyle(
                           fontFamily: 'monospace',
-                          fontSize: 10,
+                          fontSize: 11,
                           color: log.contains("SUCCESS") ? const Color(0xFF00FFC2) : 
-                                 log.contains("FAILURE") || log.contains("ERROR") ? Colors.redAccent : Colors.white60,
+                                 log.contains("REJECTED") || log.contains("ERROR") ? Colors.redAccent : Colors.white60,
                         ),
                       ),
                     );
@@ -253,27 +231,21 @@ class _TerminalScreenState extends State<TerminalScreen> with SingleTickerProvid
 
               const SizedBox(height: 24),
 
-              // --- ACTION BUTTON ---
+              // --- TRIGGER ---
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 60,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : () {
-                    HapticFeedback.mediumImpact();
-                    _runVerification();
-                  },
+                  onPressed: _isLoading ? null : _runVerification,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00FFC2),
                     foregroundColor: Colors.black,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    elevation: 0,
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                   ),
                   child: _isLoading 
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                     : const Text(
-                        "EXECUTE ATTESTATION",
+                        "RUN ATTESTATION",
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontWeight: FontWeight.bold,
