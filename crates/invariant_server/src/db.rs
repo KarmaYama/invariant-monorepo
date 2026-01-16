@@ -1,3 +1,4 @@
+// crates/invariant_server/src/db.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -24,7 +25,7 @@ impl PostgresStorage {
 impl IdentityStorage for PostgresStorage {
     async fn get_identity(&self, id: &Uuid) -> Result<Option<Identity>, EngineError> {
         let result = sqlx::query(r#"
-            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
+            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, last_attestation, status,
                    hardware_brand, hardware_device_hash, hardware_product,
                    genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities WHERE id = $1
@@ -36,7 +37,7 @@ impl IdentityStorage for PostgresStorage {
 
     async fn get_identity_by_public_key(&self, public_key: &[u8]) -> Result<Option<Identity>, EngineError> {
         let result = sqlx::query(r#"
-            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
+            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, last_attestation, status,
                    hardware_brand, hardware_device_hash, hardware_product,
                    genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities WHERE public_key = $1
@@ -49,31 +50,31 @@ impl IdentityStorage for PostgresStorage {
     async fn save_identity(&self, identity: &Identity) -> Result<(), EngineError> {
         let status_str = match identity.status {
             IdentityStatus::Active => "active",
+            IdentityStatus::Stale => "stale",
             IdentityStatus::Dormant => "dormant",
-            _ => "revoked",
+            IdentityStatus::Revoked => "revoked",
         };
 
         let network_str = identity.network.to_string();
 
-        let device_hash = if let Some(raw_device) = &identity.hardware_device {
+        let device_hash = identity.hardware_device.as_ref().map(|raw| {
             let mut hasher = Sha256::new();
-            hasher.update(raw_device.as_bytes());
-            Some(hex::encode(hasher.finalize()))
-        } else {
-            None
-        };
+            hasher.update(raw.as_bytes());
+            hex::encode(hasher.finalize())
+        });
 
         sqlx::query(r#"
             INSERT INTO identities (
-                id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
+                id, public_key, continuity_score, streak, created_at, last_heartbeat, last_attestation, status,
                 hardware_brand, hardware_device_hash, hardware_product,
                 genesis_version, network, username, is_genesis_eligible, fcm_token
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             ON CONFLICT (id) DO UPDATE SET 
-                status = $7, 
+                status = $8, 
                 continuity_score = $3, 
-                last_heartbeat = $6
+                last_heartbeat = $6,
+                last_attestation = $7
         "#)
         .bind(identity.id)
         .bind(&identity.public_key)
@@ -81,6 +82,7 @@ impl IdentityStorage for PostgresStorage {
         .bind(identity.streak as i64)
         .bind(identity.created_at)
         .bind(identity.last_heartbeat)
+        .bind(identity.last_attestation)
         .bind(status_str)
         .bind(&identity.hardware_brand)
         .bind(device_hash)
@@ -99,10 +101,6 @@ impl IdentityStorage for PostgresStorage {
 
     async fn log_heartbeat(&self, identity: &Identity, heartbeat: &Heartbeat) -> Result<u64, EngineError> {
         let mut tx = self.pool.begin().await.map_err(|e| EngineError::Storage(e.to_string()))?;
-
-        if let Err(e) = sqlx::query("SET LOCAL lock_timeout = '1000ms'").execute(&mut *tx).await {
-            return Err(EngineError::Storage(e.to_string()));
-        }
 
         let row = sqlx::query("
             UPDATE identities 
@@ -124,47 +122,25 @@ impl IdentityStorage for PostgresStorage {
 
         let new_score: i64 = row.try_get("continuity_score").map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        let insert_result = sqlx::query("INSERT INTO heartbeats (identity_id, device_signature, timestamp) VALUES ($1, $2, $3)")
+        sqlx::query("INSERT INTO heartbeats (identity_id, device_signature, timestamp) VALUES ($1, $2, $3)")
             .bind(heartbeat.identity_id)
             .bind(&heartbeat.device_signature)
             .bind(heartbeat.timestamp)
             .execute(&mut *tx)
-            .await;
+            .await
+            .map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        match insert_result {
-            Ok(_) => {
-                tx.commit().await.map_err(|e| EngineError::Storage(e.to_string()))?;
-                Ok(new_score as u64)
-            },
-            Err(e) => {
-                if let Some(db_err) = e.as_database_error() {
-                    if db_err.code().as_deref() == Some("23505") { // Unique Violation
-                        return Ok(identity.continuity_score); 
-                    }
-                }
-                return Err(EngineError::Storage(e.to_string()));
-            }
-        }
+        tx.commit().await.map_err(|e| EngineError::Storage(e.to_string()))?;
+        Ok(new_score as u64)
     }
 
     async fn run_reaper(&self) -> Result<u64, EngineError> {
-        let mut tx = self.pool.begin().await.map_err(|e| EngineError::Storage(e.to_string()))?;
-
         let result = sqlx::query(r#"
             UPDATE identities SET status = 'dormant', streak = 0
             WHERE status = 'active' AND last_heartbeat < NOW() - INTERVAL '30 days'
-        "#).execute(&mut *tx).await.map_err(|e| EngineError::Storage(e.to_string()))?;
+        "#).execute(&self.pool).await.map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        let dormant_count = result.rows_affected();
-
-        sqlx::query(r#"
-            UPDATE identities SET switch_status = 'armed' 
-            WHERE status = 'dormant' AND last_heartbeat < NOW() - INTERVAL '365 days'
-            AND switch_status = 'inactive'
-        "#).execute(&mut *tx).await.map_err(|e| EngineError::Storage(e.to_string()))?;
-
-        tx.commit().await.map_err(|e| EngineError::Storage(e.to_string()))?;
-        Ok(dormant_count)
+        Ok(result.rows_affected())
     }
 
     async fn set_username(&self, id: &Uuid, username: &str) -> Result<bool, EngineError> {
@@ -180,12 +156,12 @@ impl IdentityStorage for PostgresStorage {
 
     async fn get_leaderboard(&self, limit: i64) -> Result<Vec<Identity>, EngineError> {
         let rows = sqlx::query(r#"
-            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, status,
+            SELECT id, public_key, continuity_score, streak, created_at, last_heartbeat, last_attestation, status,
                    hardware_brand, hardware_device_hash, hardware_product,
                    genesis_version, network, username, is_genesis_eligible, fcm_token
             FROM identities 
             WHERE status = 'active'
-            ORDER BY continuity_score DESC, streak DESC
+            ORDER BY continuity_score DESC
             LIMIT $1
         "#)
         .bind(limit)
@@ -202,7 +178,6 @@ impl IdentityStorage for PostgresStorage {
         Ok(identities)
     }
 
-    // 🚀 NEW: Implementations for Wake-Up Logic
     async fn update_fcm_token(&self, id: &Uuid, token: &str) -> Result<(), EngineError> {
         sqlx::query("UPDATE identities SET fcm_token = $1 WHERE id = $2")
             .bind(token)
@@ -213,26 +188,16 @@ impl IdentityStorage for PostgresStorage {
         Ok(())
     }
 
-    async fn get_late_fcm_tokens(&self, minutes_since_heartbeat: i64) -> Result<Vec<String>, EngineError> {
+    async fn get_late_fcm_tokens(&self, minutes: i64) -> Result<Vec<String>, EngineError> {
         let rows = sqlx::query(r#"
-            SELECT fcm_token 
-            FROM identities 
-            WHERE status = 'active' 
-            AND fcm_token IS NOT NULL
+            SELECT fcm_token FROM identities 
+            WHERE status = 'active' AND fcm_token IS NOT NULL
             AND last_heartbeat < NOW() - make_interval(mins => $1)
-            -- Only fetch users who haven't been dormant for too long (e.g. < 48 hours to avoid spamming dead users)
-            AND last_heartbeat > NOW() - INTERVAL '48 hours'
         "#)
-        .bind(minutes_since_heartbeat as i32)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EngineError::Storage(e.to_string()))?;
+        .bind(minutes as i32)
+        .fetch_all(&self.pool).await.map_err(|e| EngineError::Storage(e.to_string()))?;
 
-        let tokens = rows.into_iter()
-            .filter_map(|row| row.try_get::<String, _>("fcm_token").ok())
-            .collect();
-        
-        Ok(tokens)
+        Ok(rows.into_iter().filter_map(|r| r.get(0)).collect())
     }
 }
 
@@ -242,6 +207,7 @@ fn map_row_to_identity(row: Option<sqlx::postgres::PgRow>) -> Result<Option<Iden
             let status_str: String = row.try_get("status").unwrap_or_default();
             let status = match status_str.as_str() {
                 "active" => IdentityStatus::Active,
+                "stale" => IdentityStatus::Stale,
                 "dormant" => IdentityStatus::Dormant,
                 _ => IdentityStatus::Revoked,
             };
@@ -260,6 +226,7 @@ fn map_row_to_identity(row: Option<sqlx::postgres::PgRow>) -> Result<Option<Iden
                 streak: row.try_get::<i64, _>("streak").unwrap_or(0) as u64,
                 created_at: row.try_get("created_at").map_err(|e| EngineError::Storage(e.to_string()))?,
                 last_heartbeat: row.try_get("last_heartbeat").map_err(|e| EngineError::Storage(e.to_string()))?,
+                last_attestation: row.try_get("last_attestation").map_err(|e| EngineError::Storage(e.to_string()))?,
                 status,
                 username: row.try_get("username").ok(),
                 is_genesis_eligible: row.try_get("is_genesis_eligible").unwrap_or(false),

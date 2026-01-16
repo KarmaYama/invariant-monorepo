@@ -1,3 +1,4 @@
+// crates/invariant_engine/src/core.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -5,13 +6,16 @@
  * found in the LICENSE.md file in the root directory of this source tree.
  */
 
-use invariant_shared::{Heartbeat, IdentityStatus, GenesisRequest, Identity, Network};
-use crate::ports::IdentityStorage;
+use invariant_shared::{Heartbeat, IdentityStatus, GenesisRequest, ReAttestationRequest, Identity, Network};
+use crate::ports::{IdentityStorage, NonceStorage};
 use crate::error::EngineError;
-use crate::crypto;       
+use crate::crypto;        
 use crate::attestation; 
-use chrono::Utc;
+use chrono::{Utc, Duration};
 use uuid::Uuid;
+
+const MAX_TIMESTAMP_DRIFT_SECONDS: i64 = 120; // 2 Minutes
+const ATTESTATION_TTL_DAYS: i64 = 7; // 🛡️ TRUST DECAY: Re-prove hardware every 7 days
 
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -19,14 +23,15 @@ pub struct EngineConfig {
     pub genesis_version: u16,
 }
 
-pub struct InvariantEngine<S: IdentityStorage> {
+pub struct InvariantEngine<S: IdentityStorage, N: NonceStorage> {
     storage: S,
+    nonce_storage: N, // 🛡️ NEW
     config: EngineConfig, 
 }
 
-impl<S: IdentityStorage> InvariantEngine<S> {
-    pub fn new(storage: S, config: EngineConfig) -> Self { 
-        Self { storage, config } 
+impl<S: IdentityStorage, N: NonceStorage> InvariantEngine<S, N> {
+    pub fn new(storage: S, nonce_storage: N, config: EngineConfig) -> Self { 
+        Self { storage, nonce_storage, config } 
     }
     
     pub fn get_storage(&self) -> &S { &self.storage }
@@ -37,16 +42,20 @@ impl<S: IdentityStorage> InvariantEngine<S> {
     }
 
     pub async fn process_genesis(&self, request: GenesisRequest) -> Result<Identity, EngineError> {
+        // 1. Cheap Check
         if let Some(existing) = self.storage.get_identity_by_public_key(&request.public_key).await? {
             return Ok(existing); 
         }
 
+        // 2. Expensive Check (Hardware Attestation)
         let metadata = attestation::validate_attestation_chain(
             &request.attestation_chain, 
             &request.public_key,
             Some(&request.nonce)
         )?;
 
+        // 3. Construct Identity
+        let now = Utc::now();
         let identity = Identity {
             id: Uuid::new_v4(),
             public_key: request.public_key,
@@ -55,17 +64,22 @@ impl<S: IdentityStorage> InvariantEngine<S> {
             is_genesis_eligible: false,
             username: None,
             fcm_token: None, 
-            created_at: Utc::now(),
-            last_heartbeat: Utc::now(),
+            created_at: now,
+            last_heartbeat: now,
+            last_attestation: now, // 🛡️ Initialize Trust Timer
             status: IdentityStatus::Active,
+            
             hardware_brand: metadata.brand,
             hardware_device: metadata.device,
             hardware_product: metadata.product,
+            
             genesis_version: self.config.genesis_version,
             network: self.config.network.clone(),
         };
 
+        // 4. Persistence
         self.storage.save_identity(&identity).await?;
+        
         Ok(identity)
     }
 
@@ -80,14 +94,36 @@ impl<S: IdentityStorage> InvariantEngine<S> {
              return Err(EngineError::Storage("Identity is Revoked".into()));
         }
 
-        let now = Utc::now();
+        // 🛡️ 1. NONCE FINALITY (Anti-Replay)
+        // We enforce single-use nonces ATOMICALLY via the nonce_storage (Redis).
+        // This prevents race conditions where DB might not have synced yet.
+        // TTL = 300s (5 mins) covers the challenge validity window.
+        if !self.nonce_storage.consume_nonce(&heartbeat.nonce, 300).await? {
+            return Err(EngineError::ReplayDetected);
+        }
+
+        // 🛡️ 2. TRUST DECAY CHECK (Anti-Rooting Persistence)
+        // If the last hardware proof is too old, we require a refresh.
+        // This prevents a compromised device from mining indefinitely.
+        let days_since_attest = Utc::now()
+            .signed_duration_since(identity.last_attestation)
+            .num_days();
+
+        if days_since_attest > ATTESTATION_TTL_DAYS {
+            return Err(EngineError::AttestationRequired);
+        }
+
+        // 3. RATE LIMIT CHECK (Cheap Rejection)
+        let min_interval = Duration::minutes(1380); // 23 Hours
         
-        // 1. NONCE-BOUND CRYPTO CHECK
-        // Payload = IDENTITY_ID || NONCE || TIMESTAMP
-        // This binds the signature to:
-        //  - The specific user (ID)
-        //  - The specific session (Nonce)
-        //  - The specific time (Timestamp)
+        if identity.continuity_score > 0 {
+            let time_since_last = heartbeat.timestamp.signed_duration_since(identity.last_heartbeat);
+            if time_since_last < min_interval {
+                 return Err(EngineError::RateLimitExceeded);
+            }
+        }
+
+        // 4. NONCE-BOUND CRYPTO CHECK
         let payload_str = format!("{}|{}|{}", 
             heartbeat.identity_id, 
             hex::encode(&heartbeat.nonce),
@@ -100,28 +136,54 @@ impl<S: IdentityStorage> InvariantEngine<S> {
             &heartbeat.device_signature
         )?;
 
-        // 2. DAILY VERIFICATION CADENCE (23 Hours)
-        // 1380 minutes allows for slight drift while enforcing 1 tap/day.
-        let time_since_last = now.signed_duration_since(identity.last_heartbeat);
-        if identity.continuity_score > 0 && time_since_last.num_minutes() < 1380 {
-             return Err(EngineError::RateLimitExceeded);
-        }
-
-        // 3. TIMESTAMP SANITY CHECK
+        // 5. TIMESTAMP SANITY CHECK
+        let now = Utc::now();
         let sig_age = now.signed_duration_since(heartbeat.timestamp);
-        if sig_age.num_hours() > 1 {
-             return Err(EngineError::StaleHeartbeat("Timestamp too old (>1h)".into()));
+        
+        if sig_age.num_seconds() > MAX_TIMESTAMP_DRIFT_SECONDS {
+             return Err(EngineError::StaleHeartbeat(format!("Timestamp too old (>{}s)", MAX_TIMESTAMP_DRIFT_SECONDS)));
         }
-        if sig_age.num_minutes() < -5 {
-            return Err(EngineError::StaleHeartbeat("Timestamp in the future".into()));
+        if sig_age.num_seconds() < -30 {
+            return Err(EngineError::StaleHeartbeat("Timestamp in the future (>30s)".into()));
         }
 
-        // 4. Update Score
+        // 6. Update Score
         let new_score = self.storage.log_heartbeat(&identity, &heartbeat).await?;
         Ok(new_score)
     }
 
-    /// Tier 2 Authorization: Generic Action Validator
+    /// 🛡️ NEW: Trust Refresh Handler
+    /// Upgrades a 'Stale' identity back to 'Active' by verifying fresh hardware proofs.
+    pub async fn process_reattestation(&self, request: ReAttestationRequest) -> Result<(), EngineError> {
+        // 1. Verify Binding (Identity must exist)
+        let mut identity = self.storage.get_identity(&request.id).await?
+            .ok_or(EngineError::IdentityNotFound(request.id))?;
+
+        // 2. Verify Key Continuity (Must match registered key)
+        if identity.public_key != request.public_key {
+            return Err(EngineError::InvalidAttestation("Public Key mismatch during re-attestation".into()));
+        }
+
+        // 3. Verify Hardware Attestation (Expensive)
+        // This fails if bootloader was unlocked or OS downgraded since Genesis.
+        attestation::validate_attestation_chain(
+            &request.attestation_chain, 
+            &request.public_key,
+            Some(&request.nonce)
+        )?;
+
+        // 4. Refresh Trust Timer
+        identity.last_attestation = Utc::now();
+        if identity.status == IdentityStatus::Stale {
+            identity.status = IdentityStatus::Active;
+        }
+        
+        // 5. Persistence
+        self.storage.save_identity(&identity).await?;
+        
+        Ok(())
+    }
+
     pub async fn validate_action_signature(
         &self, 
         identity_id: Uuid, 
@@ -134,7 +196,6 @@ impl<S: IdentityStorage> InvariantEngine<S> {
             .await?
             .ok_or(EngineError::IdentityNotFound(identity_id))?;
 
-        // Construct signed payload: NONCE || PAYLOAD_HASH
         let mut signed_data = Vec::new();
         signed_data.extend_from_slice(nonce);
         signed_data.extend_from_slice(payload_hash);

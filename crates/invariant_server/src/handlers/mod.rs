@@ -1,3 +1,4 @@
+// crates/invariant_server/src/handlers/mod.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -47,7 +48,9 @@ async fn check_identity_handler(
                     "tier": identity.hardware_device.as_deref().unwrap_or("Hardware TEE"),
                     "username": identity.username, 
                     "is_genesis_eligible": identity.is_genesis_eligible,
-                    "next_available": next_available.to_rfc3339()
+                    "next_available": next_available.to_rfc3339(),
+                    // 🛡️ Expose Trust Timer so Client knows when to re-attest
+                    "last_attestation": identity.last_attestation.to_rfc3339()
                 }))
             )
         },
@@ -60,7 +63,7 @@ pub fn app_router(state: SharedState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)      
         .allow_methods(Any)     
-        .allow_headers(Any);   
+        .allow_headers(Any);    
 
     // 2. Security Headers (OWASP)
     let security_headers = ServiceBuilder::new()
@@ -90,7 +93,11 @@ pub fn app_router(state: SharedState) -> Router {
         .route("/heartbeat", post(heartbeat::heartbeat_handler))
         .route("/heartbeat/challenge", get(heartbeat::get_heartbeat_challenge_handler))
 
+        // Identity Management
         .route("/identity/:id", get(check_identity_handler))
+        .route("/identity/:id/manifest", get(identity::get_manifest_handler)) // 👈 NEW
+        .route("/identity/reattest", post(identity::reattest_handler))       // 👈 NEW
+        
         .route("/identity/claim_username", post(identity::claim_username_handler))
         .route("/identity/push_token", post(identity::update_push_token_handler))
         .route("/leaderboard", get(identity::get_leaderboard_handler))

@@ -7,10 +7,11 @@
  */
 
 mod db;
+mod impls; 
 mod state;
 mod handlers;
-mod error_response; // ✅ Register Structured Error Module
-mod api_docs;       // ✅ Register OpenAPI/Swagger Module
+mod error_response; 
+mod api_docs;      
 mod services { pub mod push; }
 
 use std::net::SocketAddr;
@@ -19,9 +20,11 @@ use std::time::Duration;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+// 🛡️ Added IdentityStorage to scope for run_reaper / get_late_fcm_tokens
 use invariant_engine::{InvariantEngine, IdentityStorage, core::EngineConfig};
 use invariant_shared::Network;
 use crate::db::PostgresStorage;
+use crate::impls::RedisNonceManager; 
 use crate::state::AppState;
 
 #[tokio::main]
@@ -29,7 +32,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     
     // 1. Production JSON Logging
-    // We use JSON format for better ingestion by Logstash/Datadog/Splunk
     let log_format = tracing_subscriber::fmt::format()
         .with_level(true)
         .with_target(true)
@@ -44,15 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer().event_format(log_format))
         .init();
 
-    // 2. Initialize FCM (Server-Driven Wake Up)
-    // This loads the Service Account credentials for sending push notifications
+    // 2. Initialize FCM
     if let Err(e) = services::push::initialize().await {
         tracing::error!("⚠️ Failed to initialize FCM: {}. Wake-up calls disabled.", e);
     }
 
-    // 3. Database Connection Pool (Performance Tuned)
-    // Max Connections: 75 allows high concurrency without starving the DB.
-    // Acquire Timeout: 5s fails fast during outages rather than hanging.
+    // 3. Database Connection Pool
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let pool = PgPoolOptions::new()
         .max_connections(75) 
@@ -60,12 +59,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
     
-    // Auto-run migrations on startup
     sqlx::migrate!("./migrations").run(&pool).await?;
 
-    // 4. Redis Connection (Rate Limiting & Nonces)
+    // 4. Redis Connection
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let redis_client = redis::Client::open(redis_url)?;
+
+    // 🛡️ Initialize Atomic Nonce Manager
+    let nonce_manager = RedisNonceManager { client: redis_client.clone() };
 
     // 5. App Configuration
     let network_str = std::env::var("INVARIANT_NETWORK").unwrap_or_else(|_| "testnet".into());
@@ -90,7 +91,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 6. Initialize Engine & State
     let storage = PostgresStorage::new(pool.clone());
     let engine_config = EngineConfig { network, genesis_version };
-    let engine = InvariantEngine::new(storage, engine_config);
+    
+    // 🛡️ INJECT BOTH STORAGES
+    let engine = InvariantEngine::new(storage, nonce_manager, engine_config);
     
     let state = Arc::new(AppState { 
         engine,
@@ -98,31 +101,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // 7. Background Worker (Reaper + Wake Up Call)
-    // Runs on a detached Tokio thread to keep the main event loop clean.
     let worker_storage = PostgresStorage::new(pool.clone());
     tokio::spawn(async move {
-        // Run every 15 minutes
         let mut interval = tokio::time::interval(Duration::from_secs(900)); 
         loop {
             interval.tick().await;
             
-            // A. Wake Up Call (Users > 24 hours late)
-            // Finds users who missed their daily tap and nudges them via FCM.
+            // A. Wake Up Call
             match worker_storage.get_late_fcm_tokens(24 * 60).await {
                 Ok(tokens) => {
                     if !tokens.is_empty() {
                         tracing::info!("🔔 Waking up {} late nodes...", tokens.len());
+                        // Fixed loop to own the string
                         for token in tokens {
-                            // Fire and forget push
-                            let _ = services::push::send_wake_up_call(&token).await;
+                            let t = token.clone(); 
+                            tokio::spawn(async move {
+                                let _ = services::push::send_wake_up_call(&t).await;
+                            });
                         }
                     }
                 }
                 Err(e) => tracing::error!("Failed to fetch late tokens: {}", e),
             }
 
-            // B. Reaper (Users > 30 days dormant)
-            // Marks abandoned identities as 'Dormant' or 'Revoked'.
+            // B. Reaper
             if let Err(e) = worker_storage.run_reaper().await {
                 tracing::error!("Reaper failed: {}", e);
             }

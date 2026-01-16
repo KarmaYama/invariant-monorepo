@@ -1,9 +1,7 @@
+// crates/invariant_engine/src/error.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
- *
- * This source code is licensed under the Business Source License (BSL 1.1) 
- * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
+ * Use of this software is governed by the MIT License.
  */
  
 use thiserror::Error;
@@ -31,4 +29,11 @@ pub enum EngineError {
 
     #[error("Storage failure: {0}")]
     Storage(String),
+
+    // 🛡️ NEW SECURITY ERRORS
+    #[error("Security Alert: Replay Attack Detected (Nonce used twice).")]
+    ReplayDetected,
+
+    #[error("Trust Decay: Hardware attestation is stale. Please re-attest.")]
+    AttestationRequired,
 }

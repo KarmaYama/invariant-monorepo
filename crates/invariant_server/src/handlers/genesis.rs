@@ -14,32 +14,31 @@ use crate::error_response::AppError;
 use tracing::{error, info, warn, instrument};
 use rand::{Rng, thread_rng};
 use redis::AsyncCommands; 
+use sha2::{Sha256, Digest}; // Required for Lock ID hashing
 
 const NONCE_TTL_SECONDS: u64 = 300; 
 const CONFIG_KEY_PAUSED: &str = "invariant:config:genesis_paused";
 const MAX_GENESIS_PER_HOUR: i64 = 100;
 
 /// 🛡️ REDIS RATE LIMITER
-/// Uses the "Fixed Window" algorithm with atomic increments.
-/// Returns TRUE if the request is allowed, FALSE if blocked.
+/// Prevents IP-based flooding of the expensive attestation endpoint.
 async fn check_rate_limit(redis: &mut redis::aio::MultiplexedConnection, ip: &str) -> bool {
     let key = format!("rate_limit:genesis:{}", ip);
     
-    // 1. Atomic INCR
+    // Atomic Increment
     let count: i64 = match redis.incr(&key, 1).await {
         Ok(v) => v,
         Err(e) => {
             error!("Rate limiter Redis error: {}", e);
-            return true; // Fail open (allow traffic) if Redis breaks
+            return true; // Fail open if Redis is down, but log it.
         }
     };
 
-    // 2. Set Expiry on first request (start of window)
+    // Set Expiry window (1 hour)
     if count == 1 {
         let _ = redis.expire::<&str, ()>(&key, 3600).await;
     }
 
-    // 3. Check Limit
     if count > MAX_GENESIS_PER_HOUR {
         warn!("⛔ Rate Limit Exceeded for IP: {}", ip);
         return false;
@@ -66,7 +65,7 @@ pub async fn get_challenge_handler(
     let mut conn = state.redis.get_multiplexed_async_connection().await
         .map_err(|e| anyhow::anyhow!("Redis Error: {}", e))?;
 
-    // 1. Check Rate Limit (Redis)
+    // 1. Check Rate Limit
     let ip = addr.ip().to_string();
     if !check_rate_limit(&mut conn, &ip).await {
         return Err(invariant_engine::EngineError::RateLimitExceeded.into());
@@ -88,13 +87,15 @@ pub async fn get_challenge_handler(
         (hex_val.clone(), format!("nonce:{}", hex_val))
     };
 
+    // 4. Store with TTL
     let _: () = conn.set_ex(&redis_key, "true", NONCE_TTL_SECONDS).await
         .map_err(|e| anyhow::anyhow!("Challenge Generation Failed: {}", e))?;
 
     Ok(Json(serde_json::json!({ "nonce": nonce_hex })))
 }
 
-/// STATEFUL GENESIS (For the Mobile App) - Mints ID to DB
+/// STATEFUL GENESIS (Mobile App)
+/// Registers the Identity in the Database.
 #[utoipa::path(
     post,
     path = "/genesis",
@@ -102,10 +103,10 @@ pub async fn get_challenge_handler(
     responses(
         (status = 201, description = "Identity Minted", body = inline(serde_json::Value)),
         (status = 400, description = "Invalid Attestation or Challenge"),
+        (status = 409, description = "Concurrent Request Conflict"),
         (status = 503, description = "Genesis Paused")
     )
 )]
-// 🛠️ FIX: Removed `ret` from instrument to prevent JSON serialization crash
 #[instrument(skip(state, payload))]
 pub async fn genesis_handler(
     Extension(state): Extension<SharedState>,
@@ -114,29 +115,56 @@ pub async fn genesis_handler(
     let mut conn = state.redis.get_multiplexed_async_connection().await
         .map_err(|e| anyhow::anyhow!("Redis connection failed: {}", e))?;
 
+    // 1. Feature Flag
     let is_paused: bool = conn.exists(CONFIG_KEY_PAUSED).await.unwrap_or(false);
     if is_paused {
         return Err(anyhow::anyhow!("Genesis paused").into());
     }
 
+    // 2. Nonce Validation (Peek)
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
-
-    // Atomic Get & Delete - Prevents Replay Attacks
-    let val: Option<String> = conn.get_del(&redis_key).await
-        .map_err(|e| anyhow::anyhow!("Nonce Validation Error: {}", e))?;
-
-    if val.is_none() {
+    let nonce_exists: bool = conn.exists(&redis_key).await.unwrap_or(false);
+    
+    if !nonce_exists {
         return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid or Expired Challenge." }))));
     }
 
+    // 3. 🔒 DISTRIBUTED LOCK (Anti-Race Condition)
+    // Hash the public key to prevent "Key stuffing" DoS attacks
+    let pk_hash = Sha256::digest(&payload.public_key);
+    let lock_key = format!("lock:genesis:{}", hex::encode(pk_hash));
+
+    // Try to acquire lock for 10 seconds. Returns true if acquired.
+    let lock_acquired: bool = redis::cmd("SET")
+        .arg(&lock_key)
+        .arg("1")
+        .arg("NX") // Not Exists
+        .arg("EX") // Expiry
+        .arg(10)   // Seconds
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(false);
+
+    if !lock_acquired {
+        warn!("⚠️ Concurrent Genesis Blocked for key hash: {}", hex::encode(pk_hash));
+        return Ok((StatusCode::CONFLICT, Json(serde_json::json!({ 
+            "error": "Request already in progress. Please wait." 
+        }))));
+    }
+
+    // 4. Consume Nonce (Atomic Delete)
+    // We own the lock, so we burn the nonce now.
+    let _: () = conn.del(&redis_key).await.unwrap_or(());
+
+    // 5. Engine Processing
     match state.engine.process_genesis(payload).await {
         Ok(identity) => {
             info!("✅ Genesis Success! Minted: {}", identity.id);
             Ok((StatusCode::CREATED, Json(serde_json::json!({ 
                 "id": identity.id,
                 "status": "active",
-                "tier": "Verified TEE" 
+                "tier": identity.hardware_device.unwrap_or_else(|| "Verified TEE".into()) 
             }))))
         },
         Err(e) => {
@@ -146,8 +174,8 @@ pub async fn genesis_handler(
     }
 }
 
-/// STATELESS VERIFICATION (For the SDK/B2B) - NO DB WRITE
-/// This is the endpoint Craig's partners will use.
+/// STATELESS VERIFICATION (B2B SDK)
+/// Verifies hardware but does not create a user account.
 #[utoipa::path(
     post,
     path = "/verify",
@@ -161,11 +189,10 @@ pub async fn verify_stateless_handler(
     Extension(state): Extension<SharedState>,
     Json(payload): Json<GenesisRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    // 1. Redis Connection
     let mut conn = state.redis.get_multiplexed_async_connection().await
         .map_err(|e| anyhow::anyhow!("Infrastructure Error: {}", e))?;
 
-    // 2. Check Nonce (Anti-Replay)
+    // 1. Nonce Check (Consume immediately for stateless)
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
 
@@ -177,7 +204,7 @@ pub async fn verify_stateless_handler(
         }))));
     }
 
-    // 3. PURE CRYPTO CHECK (Engine without Storage)
+    // 2. Pure Crypto Verification
     match invariant_engine::validate_attestation_chain(
         &payload.attestation_chain,
         &payload.public_key,
@@ -186,11 +213,15 @@ pub async fn verify_stateless_handler(
         Ok(metadata) => {
             info!("🔍 Stateless Verification: {} - {}", metadata.trust_tier, metadata.product.as_deref().unwrap_or("Unknown"));
             
+            // ✅ Return Full Hardware Metadata
             Ok((StatusCode::OK, Json(serde_json::json!({
                 "verified": true,
                 "tier": metadata.trust_tier,
+                "brand": metadata.brand,
                 "device_model": metadata.device,
-                "risk_score": 0.0 // 0.0 = Pure Hardware Trust
+                "product": metadata.product,
+                "boot_locked": metadata.is_boot_locked,
+                "risk_score": 0.0 // 0.0 = Trustworthy
             }))))
         },
         Err(e) => {
@@ -199,7 +230,7 @@ pub async fn verify_stateless_handler(
                 "verified": false,
                 "tier": "REJECTED",
                 "error": e.to_string(),
-                "risk_score": 100.0 // 100.0 = High Risk / Emulator
+                "risk_score": 100.0 // 100.0 = Fraud
             }))))
         }
     }

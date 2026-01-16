@@ -1,22 +1,24 @@
+// crates/invariant_shared/src/identity.rs
 /*
- * Copyright (c) 2025 Invariant Protocol
+ * Copyright (c) 2026 Invariant Protocol.
  * Use of this software is governed by the MIT License.
  */
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use utoipa::ToSchema; // 👈 Added
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)] // 👈 Added ToSchema
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IdentityStatus {
     Active,
+    Stale,   // ⚠️ NEW: Identity is valid, but hardware trust has decayed.
     Dormant,
     Revoked,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)] // 👈 Added ToSchema
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Testnet,
@@ -35,7 +37,7 @@ impl ToString for Network {
 }
 
 /// The core invariant representing a persistent entity.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)] // 👈 Added ToSchema
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Identity {
     pub id: Uuid,
     pub public_key: Vec<u8>,
@@ -52,7 +54,14 @@ pub struct Identity {
     pub fcm_token: Option<String>,
 
     pub created_at: DateTime<Utc>,
+    
+    /// The last time a valid Heartbeat signature was received.
     pub last_heartbeat: DateTime<Utc>,
+    
+    /// 🛡️ NEW: The last time we verified the HARDWARE CHAIN integrity.
+    /// This decays over time (e.g. 7 days).
+    pub last_attestation: DateTime<Utc>,
+
     pub status: IdentityStatus,
 
     pub hardware_brand: Option<String>,

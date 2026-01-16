@@ -1,3 +1,4 @@
+// crates/invariant_server/src/error_response.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -30,6 +31,19 @@ impl IntoResponse for AppError {
             Some(EngineError::StaleHeartbeat(msg)) => (StatusCode::BAD_REQUEST, "STALE_TIMESTAMP", msg.clone()),
             Some(EngineError::InvalidAttestation(msg)) => (StatusCode::BAD_REQUEST, "ATTESTATION_FAILED", msg.clone()),
             Some(EngineError::Storage(_)) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Storage unavailable.".to_string()),
+            
+            // 🛡️ NEW SECURITY ERRORS - Fixed .to_string() calls
+            Some(EngineError::ReplayDetected) => (
+                StatusCode::CONFLICT, 
+                "REPLAY_DETECTED", 
+                "Security Alert: This nonce has already been used.".to_string()
+            ),
+            Some(EngineError::AttestationRequired) => (
+                StatusCode::from_u16(426).unwrap(), // 426 Upgrade Required
+                "ATTESTATION_REQUIRED", 
+                "Trust decayed. Please perform background re-attestation.".to_string()
+            ),
+            
             None => (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN_ERROR", "An unexpected error occurred.".to_string()),
         };
 

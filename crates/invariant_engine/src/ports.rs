@@ -4,7 +4,6 @@
  *
  * This source code is licensed under the Business Source License (BSL 1.1) 
  * found in the LICENSE.md file in the root directory of this source tree.
- * * You may NOT use this code for active blocking or enforcement without a commercial license.
  */
 
 use async_trait::async_trait;
@@ -19,15 +18,20 @@ pub trait IdentityStorage: Send + Sync {
     async fn save_identity(&self, identity: &Identity) -> Result<(), EngineError>;
     async fn log_heartbeat(&self, identity: &Identity, heartbeat: &Heartbeat) -> Result<u64, EngineError>;
     
-    /// Mark old identities as dormant.
     async fn run_reaper(&self) -> Result<u64, EngineError>;
-    
     async fn set_username(&self, id: &Uuid, username: &str) -> Result<bool, EngineError>;
     async fn get_leaderboard(&self, limit: i64) -> Result<Vec<Identity>, EngineError>;
 
-    // 🚀 NEW: Wake-Up Logic
     async fn update_fcm_token(&self, id: &Uuid, token: &str) -> Result<(), EngineError>;
-    
-    /// Returns FCM tokens for users who haven't mined in `minutes` but are still Active.
     async fn get_late_fcm_tokens(&self, minutes_since_heartbeat: i64) -> Result<Vec<String>, EngineError>;
+}
+
+/// 🛡️ NEW: Interface for Atomic Nonce Management (Redis SETNX)
+#[async_trait]
+pub trait NonceStorage: Send + Sync {
+    /// Atomically checks if a nonce exists and marks it as used.
+    /// Returns:
+    /// - Ok(true): Nonce was fresh and is now consumed.
+    /// - Ok(false): Nonce was ALREADY used (Replay Attack).
+    async fn consume_nonce(&self, nonce: &[u8], ttl_seconds: u64) -> Result<bool, EngineError>;
 }
