@@ -1,10 +1,3 @@
-To make the SDK truly launch-ready, we need to balance the high-security "Shadow Mode" aesthetic with a professional onboarding experience. Since you don't have an API Key system yet, the SDK and README will assume a "permissive pilot" phase where developers can test using a demo key or local dev server.
-
-### 1. The Professional README
-
-This serves as the "face" of your SDK on GitHub or Pub.dev. It focuses on the **Cost of Forgery** and the **Hardware-Entangled** nature of the protocol.
-
-```markdown
 # Invariant SDK
 
 **Stop Automated Identity Abuse at the Hardware Layer.**
