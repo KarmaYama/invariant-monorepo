@@ -14,7 +14,7 @@ class ApiClient {
   final String baseUrl;
 
   ApiClient({required this.apiKey, String? baseUrl}) 
-      : baseUrl = baseUrl ?? "https://api.invariantprotocol.com"; 
+      : baseUrl = baseUrl ?? "http://16.171.151.222:3000"; 
 
   /// Requests a fresh nonce for hardware attestation
   Future<String?> getChallenge() async {
