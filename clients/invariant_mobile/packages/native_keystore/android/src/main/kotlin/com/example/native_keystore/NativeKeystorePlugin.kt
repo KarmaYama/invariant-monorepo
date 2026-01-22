@@ -42,12 +42,11 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
                     }
                 }
                 "generateIdentity" -> {
-                    // ⚡ CRITICAL FIX: Handle the input as either ArrayList (New) or String (Legacy)
-                    // This prevents the "ArrayList cannot be cast to String" crash
+                    // 1. FIX CRASH: Handle ArrayList input from Flutter
                     val nonceRaw = call.argument<Any>("nonce")!!
                     
                     val challengeBytes = when (nonceRaw) {
-                        is String -> hexStringToByteArray(nonceRaw) // Backwards compatibility
+                        is String -> hexStringToByteArray(nonceRaw) // Legacy support
                         is ArrayList<*> -> {
                             // Flutter sends List<int> as ArrayList<Integer>
                             val list = nonceRaw as ArrayList<Int>
@@ -56,14 +55,14 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
                         else -> throw IllegalArgumentException("Invalid nonce type: ${nonceRaw.javaClass}")
                     }
 
-                    // Destructive rotation: Delete old zombie key if present
+                    // 2. Destructive rotation: Delete old zombie key
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
                     if (keyStore.containsAlias(KEY_ALIAS)) {
                         keyStore.deleteEntry(KEY_ALIAS)
                     }
                     
-                    // Generate new key with the RAW bytes
+                    // 3. Generate new key
                     result.success(generateIdentity(challengeBytes))
                 }
                 "signHeartbeat" -> {
@@ -98,7 +97,6 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
         return mapOf("publicKey" to publicKeyBytes, "attestationChain" to chainList)
     }
 
-    // ⚡ UPDATED: Accepts ByteArray directly instead of hex string
     private fun generateIdentity(challengeBytes: ByteArray): Map<String, Any> {
         val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         val parameterSpec = KeyGenParameterSpec.Builder(
@@ -107,7 +105,12 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
         )
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-            .setAttestationChallenge(challengeBytes) // Correctly sets raw challenge bytes
+            .setAttestationChallenge(challengeBytes)
+            // 🔒 SECURITY FIX: Require User Presence (Biometrics/PIN)
+            // This adds the missing tag that the server is looking for.
+            .setUserAuthenticationRequired(true)
+            // Allow use for 60 seconds after Flutter LocalAuth unlocks the phone
+            .setUserAuthenticationValidityDurationSeconds(60) 
             .build()
 
         kpg.initialize(parameterSpec)
