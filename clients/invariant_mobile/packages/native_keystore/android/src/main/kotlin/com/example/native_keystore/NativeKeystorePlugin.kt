@@ -1,3 +1,4 @@
+// clients/invariant_mobile/packages/native_keystore/android/src/main/kotlin/com/example/native_keystore/NativeKeystorePlugin.kt
 package com.example.native_keystore
 
 import androidx.annotation.NonNull
@@ -12,6 +13,7 @@ import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.spec.ECGenParameterSpec
 import java.security.Signature
+import java.util.ArrayList
 
 class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
     private lateinit var channel : MethodChannel
@@ -25,30 +27,44 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         try {
             when (call.method) {
-                // 🔍 RECOVERY: Check if device already has a key
                 "hasIdentity" -> {
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
                     result.success(keyStore.containsAlias(KEY_ALIAS))
                 }
-                // 🔍 RECOVERY: Get public key/chain without deleting private key
                 "recoverIdentity" -> {
                     val identity = getExistingIdentity()
                     if (identity != null) {
                         result.success(identity)
                     } else {
-                        result.error("NO_IDENTITY", "No identity found to recover", null)
+                        // Return error so Dart triggers the Auto-Rotation logic
+                        result.error("NO_IDENTITY", "No identity found", null)
                     }
                 }
                 "generateIdentity" -> {
-                    val nonceHex = call.argument<String>("nonce")!!
-                    // ⚠️ DESTRUCTIVE: Only used if hasIdentity is false
+                    // ⚡ CRITICAL FIX: Handle the input as either ArrayList (New) or String (Legacy)
+                    // This prevents the "ArrayList cannot be cast to String" crash
+                    val nonceRaw = call.argument<Any>("nonce")!!
+                    
+                    val challengeBytes = when (nonceRaw) {
+                        is String -> hexStringToByteArray(nonceRaw) // Backwards compatibility
+                        is ArrayList<*> -> {
+                            // Flutter sends List<int> as ArrayList<Integer>
+                            val list = nonceRaw as ArrayList<Int>
+                            ByteArray(list.size) { list[it].toByte() }
+                        }
+                        else -> throw IllegalArgumentException("Invalid nonce type: ${nonceRaw.javaClass}")
+                    }
+
+                    // Destructive rotation: Delete old zombie key if present
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
                     if (keyStore.containsAlias(KEY_ALIAS)) {
                         keyStore.deleteEntry(KEY_ALIAS)
                     }
-                    result.success(generateIdentity(nonceHex))
+                    
+                    // Generate new key with the RAW bytes
+                    result.success(generateIdentity(challengeBytes))
                 }
                 "signHeartbeat" -> {
                     val payload = call.argument<String>("payload")!!
@@ -82,8 +98,8 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
         return mapOf("publicKey" to publicKeyBytes, "attestationChain" to chainList)
     }
 
-    private fun generateIdentity(nonceHex: String): Map<String, Any> {
-        val challengeBytes = hexStringToByteArray(nonceHex)
+    // ⚡ UPDATED: Accepts ByteArray directly instead of hex string
+    private fun generateIdentity(challengeBytes: ByteArray): Map<String, Any> {
         val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         val parameterSpec = KeyGenParameterSpec.Builder(
             KEY_ALIAS,
@@ -91,7 +107,7 @@ class NativeKeystorePlugin: FlutterPlugin, MethodCallHandler {
         )
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-            .setAttestationChallenge(challengeBytes)
+            .setAttestationChallenge(challengeBytes) // Correctly sets raw challenge bytes
             .build()
 
         kpg.initialize(parameterSpec)

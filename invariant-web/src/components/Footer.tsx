@@ -31,7 +31,7 @@ export function Footer() {
         </div>
 
         <div className="flex justify-between items-center pt-8 border-t border-white/5 text-xs font-mono text-white/30">
-          <div>© 2025 Invariant Protocol</div>
+          <div>© 2026 Invariant Protocol</div>
           <div>Built with ♥ in UK</div>
         </div>
       </div>
