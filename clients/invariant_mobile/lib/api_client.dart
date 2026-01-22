@@ -38,7 +38,7 @@ class InvariantClient {
     final url = Uri.parse('$baseUrl/genesis');
     
     try {
-      List<int> nonceBytes = _hexToBytes(nonce);
+      List<int> nonceBytes = hexToBytes(nonce);
 
       final response = await http.post(
         url,
@@ -74,7 +74,7 @@ class InvariantClient {
         body: jsonEncode({
           'identity_id': uuid,
           'device_signature': signature,
-          'nonce': _hexToBytes(nonce), // Must send nonce bytes
+          'nonce': hexToBytes(nonce), // Must send nonce bytes
           'timestamp': timestamp,
         }),
       ).timeout(kRequestTimeout);
@@ -158,7 +158,7 @@ class InvariantClient {
     }
   }
 
-  List<int> _hexToBytes(String hex) {
+  static List<int> hexToBytes(String hex) {
     List<int> bytes = [];
     for (int i = 0; i < hex.length; i += 2) {
       bytes.add(int.parse(hex.substring(i, i + 2), radix: 16));

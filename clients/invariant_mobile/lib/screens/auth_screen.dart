@@ -1,3 +1,4 @@
+// clients/invariant_mobile/lib/screens/auth_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -61,26 +62,67 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       }
 
       // 2. CHECK FOR EXISTING KEY (Recovery Mode)
+      // ⚠️ CRITICAL: If the server doesn't know this key (e.g. DB wipe), 
+      // recovery will fail 'Challenge Mismatch' because we can't update the old cert's nonce.
+      // We must be prepared to Rotate (Overwrite) the key if recovery fails.
       final bool hasKey = await platform.invokeMethod('hasIdentity');
-      Map<Object?, Object?> data;
-
+      
       if (hasKey) {
-        setState(() => _status = "RECOVERING HARDWARE KEY...");
-        // Non-destructive recovery
-        data = await platform.invokeMethod('recoverIdentity');
-      } else {
-        setState(() => _status = "FORGING NEW KEY...");
-        // Destructive generation
-        data = await platform.invokeMethod('generateIdentity', {'nonce': nonce});
+        bool recoverySuccess = await _tryRecover(nonce);
+        if (recoverySuccess) return; // Done!
+
+        // If recovery failed, fall through to Generate New Key
+        setState(() => _status = "KEY STALE. ROTATING...");
+        await Future.delayed(const Duration(seconds: 1));
       }
+
+      // 3. GENERATE NEW KEY (Destructive)
+      await _generateAndRegister(nonce);
+
+    } catch (e) {
+      setState(() => _status = "ERROR: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<bool> _tryRecover(String nonce) async {
+    setState(() => _status = "RECOVERING HARDWARE KEY...");
+    try {
+      // Note: recoverIdentity usually ignores nonce on native side because cert is already baked.
+      // We pass it just in case logic changes, but we rely on server potentially accepting old certs if policy allows.
+      // IF policy is strict (fresh nonce required), this will fail genesis, triggering rotation below.
+      final data = await platform.invokeMethod('recoverIdentity');
+      return await _registerOnServer(data, nonce);
+    } catch (e) {
+      debugPrint("Recovery failed: $e");
+      return false;
+    }
+  }
+
+  Future<void> _generateAndRegister(String nonce) async {
+    setState(() => _status = "FORGING NEW KEY...");
+    
+    // ⚠️ CRITICAL FIX: Convert Hex String -> Uint8List for Native Layer
+    // Android Keystore requires raw bytes for the challenge.
+    final nonceBytes = InvariantClient.hexToBytes(nonce);
+
+    final data = await platform.invokeMethod('generateIdentity', {
+      'nonce': nonceBytes 
+    });
+    
+    bool success = await _registerOnServer(data, nonce);
+    if (!success) {
+      setState(() => _status = "SERVER REJECTED PROOF");
+    }
+  }
+
+  Future<bool> _registerOnServer(Map<Object?, Object?> data, String nonce) async {
+      setState(() => _status = "SYNCING WITH NODE...");
       
       final pkBytes = (data['publicKey'] as List<Object?>).map((e) => e as int).toList();
       final chainBytes = (data['attestationChain'] as List<Object?>).map((c) => (c as List<Object?>).map((b) => b as int).toList()).toList();
 
-      setState(() => _status = "SYNCING WITH NODE...");
-      
-      // 3. Register/Recover on Server
-      // If DB was wiped, server sees this as a new registration of an existing key.
       final String? identityId = await client.genesis(pkBytes, chainBytes, nonce);
       
       if (identityId != null) {
@@ -91,14 +133,9 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             MaterialPageRoute(builder: (_) => IdentityCard(identityId: identityId)),
           );
         }
-      } else {
-        setState(() => _status = "SERVER REJECTED PROOF");
+        return true;
       }
-    } catch (e) {
-      setState(() => _status = "ERROR: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+      return false;
   }
 
   @override
