@@ -62,21 +62,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       }
 
       // 2. CHECK FOR EXISTING KEY (Recovery Mode)
-      // ⚠️ CRITICAL: If the server doesn't know this key (e.g. DB wipe), 
-      // recovery will fail 'Challenge Mismatch' because we can't update the old cert's nonce.
-      // We must be prepared to Rotate (Overwrite) the key if recovery fails.
       final bool hasKey = await platform.invokeMethod('hasIdentity');
       
       if (hasKey) {
+        // Try recovery first
         bool recoverySuccess = await _tryRecover(nonce);
-        if (recoverySuccess) return; // Done!
+        if (recoverySuccess) return; // Success!
 
-        // If recovery failed, fall through to Generate New Key
+        // If recovery failed (Challenge Mismatch), we MUST rotate the key.
         setState(() => _status = "KEY STALE. ROTATING...");
         await Future.delayed(const Duration(seconds: 1));
       }
 
-      // 3. GENERATE NEW KEY (Destructive)
+      // 3. GENERATE NEW KEY (Destructive Rotation)
       await _generateAndRegister(nonce);
 
     } catch (e) {
@@ -89,9 +87,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   Future<bool> _tryRecover(String nonce) async {
     setState(() => _status = "RECOVERING HARDWARE KEY...");
     try {
-      // Note: recoverIdentity usually ignores nonce on native side because cert is already baked.
-      // We pass it just in case logic changes, but we rely on server potentially accepting old certs if policy allows.
-      // IF policy is strict (fresh nonce required), this will fail genesis, triggering rotation below.
       final data = await platform.invokeMethod('recoverIdentity');
       return await _registerOnServer(data, nonce);
     } catch (e) {
@@ -103,8 +98,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   Future<void> _generateAndRegister(String nonce) async {
     setState(() => _status = "FORGING NEW KEY...");
     
-    // ⚠️ CRITICAL FIX: Convert Hex String -> Uint8List for Native Layer
-    // Android Keystore requires raw bytes for the challenge.
+    // ⚠️ CRITICAL FIX: Encode Nonce as Bytes for Native Layer
     final nonceBytes = InvariantClient.hexToBytes(nonce);
 
     final data = await platform.invokeMethod('generateIdentity', {

@@ -38,6 +38,8 @@ class InvariantClient {
     final url = Uri.parse('$baseUrl/genesis');
     
     try {
+      // ⚠️ CRITICAL FIX: Convert Hex String -> Bytes before sending logic
+      // Server expects the nonce signed by hardware to match this.
       List<int> nonceBytes = hexToBytes(nonce);
 
       final response = await http.post(
@@ -74,14 +76,13 @@ class InvariantClient {
         body: jsonEncode({
           'identity_id': uuid,
           'device_signature': signature,
-          'nonce': hexToBytes(nonce), // Must send nonce bytes
+          'nonce': hexToBytes(nonce), // ⚠️ CRITICAL FIX
           'timestamp': timestamp,
         }),
       ).timeout(kRequestTimeout);
 
       if (response.statusCode == 200) return true;
       
-      // 429 = Already tapped today (Success state for UI)
       if (response.statusCode == 429) {
         debugPrint("⏳ Daily Limit Reached");
         return true; 
@@ -95,6 +96,7 @@ class InvariantClient {
     }
   }
 
+  // ... [Keep other methods: claimUsername, checkSession, etc. unchanged] ...
   Future<bool> claimUsername(String uuid, String username) async {
     final url = Uri.parse('$baseUrl/identity/claim_username');
     try {
@@ -113,8 +115,8 @@ class InvariantClient {
     final url = Uri.parse('$baseUrl/identity/$uuid');
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 5));
-      if (response.statusCode == 404) return false; // Explicitly revoked/missing
-      return true; // Fail open
+      if (response.statusCode == 404) return false;
+      return true;
     } catch (e) {
       return true; 
     }
@@ -158,6 +160,7 @@ class InvariantClient {
     }
   }
 
+  /// Helper to convert Hex String to Bytes for Native Platform Channels
   static List<int> hexToBytes(String hex) {
     List<int> bytes = [];
     for (int i = 0; i < hex.length; i += 2) {
