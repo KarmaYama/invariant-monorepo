@@ -35,7 +35,7 @@ export default function Pilot() {
             </div>
             
             <h3 className="text-2xl font-serif text-white mb-2">Android Pilot Client</h3>
-            <p className="text-white/40 text-sm mb-8">Version 1.2.0 • 50MB • Safe & Signed</p>
+            <p className="text-white/40 text-sm mb-8">Version 1.3.0 • 50MB • Safe & Signed</p>
             
             <a 
               href="/invariant.apk" 
