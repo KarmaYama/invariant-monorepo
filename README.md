@@ -37,7 +37,7 @@ graph TD
 
 ## 🔐 The Genesis Protocol (Remote Attestation)
 
-The "Genesis" event is a cryptographic handshake that proves a user is a unique human with a genuine, untampered device. This process is effectively "un-emulatable."
+The "Genesis" event is a cryptographic handshake that proves a user is a unique human with a genuine, untampered device. This creates an economic barrier that makes large-scale emulation computationally and financially unviable.
 
 ```mermaid
 sequenceDiagram
@@ -67,36 +67,41 @@ sequenceDiagram
 
 ---
 
+## ⚔️ Threat Model
+
+Invariant is designed to solve **Digital Sybil Attacks**, not physical security. We explicitly map our defenses as follows:
+
+| Attack Vector | Status | Mechanism |
+| --- | --- | --- |
+| **Emulator Farms** | 🛡️ **Blocked** | Missing valid Hardware Root of Trust signatures. |
+| **Rooted Devices** | 🛡️ **Blocked** | Bootloader state verification (`VerifiedBootState`). |
+| **Man-in-the-Middle** | 🛡️ **Blocked** | Challenge-Response Nonce bound to the TEE signature. |
+| **Device Resale** | ⚠️ **Mitigated** | **Continuity Score** decay requires constant active possession. |
+| **Physical Theft** | ❌ **Out of Scope** | Relies on device OS security (PIN/Biometrics). |
+
+---
+
 ## ⚡ Why Invariant?
 
 The digital world is currently facing an "Identity Inflation" crisis. Invariant solves this by shifting the cost of Sybil attacks from **software (cheap)** to **silicon (expensive)**.
 
 ### 1. Hardware-Backed Verification
 
-Unlike traditional 2FA, Invariant verifies the integrity of the OS. If the bootloader is unlocked or the device is an emulator, the attestation fails at the cryptographic level.
+Unlike traditional 2FA, Invariant verifies the **integrity of the OS**. If the bootloader is unlocked or the device is an emulator, the attestation fails at the cryptographic level.
 
 ### 2. Trust Decay & Persistence
 
 Trust isn't static. Invariant uses a **Continuity Score** maintained by background heartbeats.
 
-* **Titanium Tier:** Hardware-bound keys stored in a dedicated Secure Element.
-* **Steel Tier:** Hardware-bound keys stored in the main TEE.
+* **Titanium Tier:** Keys stored in a dedicated Secure Element (StrongBox).
+* **Steel Tier:** Keys stored in the standard TEE (TrustZone).
 
-### 3. Privacy-First Identity
+### 3. Privacy & Linkability
 
-Invariant validates **existence**, not demographics. No iris scans, no passports—just the cryptographic proof that a unique device is in the hands of a human.
+Invariant validates **existence**, not demographics.
 
----
-
-## 📊 Security Tiers
-
-```mermaid
-pie title Identity Tier Distribution
-    "Titanium (StrongBox/SE)" : 45
-    "Steel (Standard TEE)" : 50
-    "Software (Rejected)" : 5
-
-```
+* **No PII:** No names, emails, or phone numbers are stored.
+* **Scoped Identities:** Partners receive a derived, application-specific identifier. A user cannot be correlated across different applications (e.g., a Game and a DAO) unless they explicitly opt-in to link them.
 
 ---
 
@@ -145,7 +150,7 @@ if is_valid.tier == "TITANIUM" {
 * [x] **Phase 1:** Core Rust Engine & Attestation Logic.
 * [ ] **Phase 2:** B2B SDK Product Hunt Launch (In Progress).
 * [ ] **Phase 3:** Pilot Launch in High-Bot Environments.
-* [ ] **Phase 4:** Decentralized Validation Network.
+* [ ] **Phase 4:** Decentralized Validation (Federated Verifier Nodes).
 
 ---
 
@@ -160,5 +165,3 @@ Invariant Protocol is licensed under the **Business Source License 1.1 (BSL 1.1)
 [Download Release](https://invariantprotocol.com/pilot) | [Whitepaper](https://invariantprotocol.com/whitepaper) | [Source](https://www.google.com/search?q=https://github.com/KarmaYama/invariant-monorepo)
 
 *Copyright © 2026 Invariant Protocol. Built with Rust and Iron.*
-
----
