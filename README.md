@@ -1,88 +1,164 @@
 # Invariant Protocol
 
-### The Anchor for the Digital Age
+### The Hardware-Bound Identity Anchor for a Post-AI World
 
 ---
 
-## The Problem: Lost Proof of Personhood
+## 🏗 System Architecture
 
-With AI generating realistic human behavior, the assumption **"one account = one human"** is broken. Bots and automated accounts flood platforms, undermining trust. Biometrics and passwords alone are no longer enough without compromising privacy.
+Invariant operates as a decentralized infrastructure layer. It bridges the gap between physical silicon and digital identity through high-fidelity hardware attestation.
 
-**Invariant** is not a social network or a wallet—it is infrastructure. It provides **hardware-backed proof of existence**, establishing a cryptographically verifiable link between a human and their physical device.
+```mermaid
+graph TD
+    subgraph "Client Layer (Mobile Device)"
+        A[Mobile App] --> B{Secure Enclave}
+        B -->|P-256 KeyGen| C[StrongBox / SE]
+        B -->|KeyStore| D[Standard TEE]
+    end
 
----
+    subgraph "Invariant Protocol Node (Rust/Axum)"
+        E[API Gateway] --> F[Attestation Engine]
+        F -->|X.509 Parsing| G[ASN.1 Decoder]
+        G -->|Root Validation| H[Hardware Root of Trust]
+        F -->|Nonce Verification| I[Anti-Replay Layer]
+    end
 
-## ⚡ Why Invariant Matters
+    subgraph "Persistence & Intelligence"
+        J[(PostgreSQL)] -- Identity Ledger --> F
+        K[(Redis)] -- Nonce Finality --> I
+    end
 
-Invariant ensures that digital identity is **private, persistent, and auditable**.
+    A == Attestation Bundle ==> E
+    H -.->|Google/OEM Roots| G
 
-1. **Hardware-Backed Verification**  
-   - Verifies the device’s Trusted Execution Environment (TEE) or Secure Element (StrongBox).  
-   - Prevents emulator, rooted device, or server-farm abuse.  
-
-2. **Minimal Interaction**  
-   - Generate your identity with a single tap.  
-   - Continuity scores update via background heartbeats with negligible battery/data use.  
-
-3. **Absolute Privacy**  
-   - No biometrics or personal data leave the device.  
-   - The network validates **existence**, not identity.
-
----
-
-## 🧬 How It Works
-
-1. **Attestation:** Device generates a cryptographic certificate chain signed by the manufacturer.  
-2. **Binding:** The chain is verified against the global hardware root of trust. A unique ID is minted.  
-3. **Persistence:** Periodic encrypted heartbeats maintain a **Continuity Score**, reflecting verified presence over time.
-
-> Battery and data impact is minimal (<1 text message/day).
+```
 
 ---
 
-## 📱 User Experience
+## 🔐 The Genesis Protocol (Remote Attestation)
 
-- **Dashboard:** Displays Anchor Status and Continuity Score.  
-- **Security Tiers:**  
-  - **Titanium:** StrongBox/Secure Element devices (high security).  
-  - **Steel:** Standard TEE devices (standard security).  
-- **Future Utility:** Verified identities enable “bot-free” login, CAPTCHA bypass, and access to trusted services.
+The "Genesis" event is a cryptographic handshake that proves a user is a unique human with a genuine, untampered device. This process is effectively "un-emulatable."
+
+```mermaid
+sequenceDiagram
+    participant D as Android Device (TEE)
+    participant S as Invariant Node (Rust)
+    participant G as Google/OEM Root CA
+
+    Note over D, S: Protocol Phase: Identity Minting
+    S->>D: 1. Challenge (32-byte Nonce)
+    D->>D: 2. Generate P-256 Keypair in StrongBox
+    D->>D: 3. Create Hardware Attestation Statement
+    D->>S: 4. GenesisRequest (Public Key + Cert Chain + Nonce)
+    
+    S->>S: 5. Verify ASN.1 Extension Data
+    S->>S: 6. Enforce SecurityLevel == TEE/StrongBox
+    S->>S: 7. Validate Bootloader State (Locked)
+    S->>G: 8. Verify Signature Chain to Root
+    
+    alt Verification Success
+        S->>S: 9. Mint Identity & Issue Continuity Score
+        S-->>D: 201 Created (Identity Registered)
+    else Verification Failure
+        S-->>D: 403 Rejected (Emulator/Root Detected)
+    end
+
+```
 
 ---
 
-## 🚀 Getting Started (Testnet V1)
+## ⚡ Why Invariant?
 
-1. Download the mobile client (APK in Releases).  
-2. Generate your hardware-bound key using your device.  
-3. Keep the app installed and periodically open to sync your score.  
-4. Join [Discord](https://discord.gg/ejY6tDCx) for early feedback.
+The digital world is currently facing an "Identity Inflation" crisis. Invariant solves this by shifting the cost of Sybil attacks from **software (cheap)** to **silicon (expensive)**.
+
+### 1. Hardware-Backed Verification
+
+Unlike traditional 2FA, Invariant verifies the integrity of the OS. If the bootloader is unlocked or the device is an emulator, the attestation fails at the cryptographic level.
+
+### 2. Trust Decay & Persistence
+
+Trust isn't static. Invariant uses a **Continuity Score** maintained by background heartbeats.
+
+* **Titanium Tier:** Hardware-bound keys stored in a dedicated Secure Element.
+* **Steel Tier:** Hardware-bound keys stored in the main TEE.
+
+### 3. Privacy-First Identity
+
+Invariant validates **existence**, not demographics. No iris scans, no passports—just the cryptographic proof that a unique device is in the hands of a human.
 
 ---
 
-## 🛡️ Security & Integrity
+## 📊 Security Tiers
 
-- **Open Source:** Core logic is publicly auditable.  
-- **Non-Custodial:** Private keys never leave the device.  
-- **Anti-Emulator:** Only physical, uncompromised devices are accepted.
+```mermaid
+pie title Identity Tier Distribution
+    "Titanium (StrongBox/SE)" : 45
+    "Steel (Standard TEE)" : 50
+    "Software (Rejected)" : 5
+
+```
+
+---
+
+## 🚀 Developer Integration (B2B SDK)
+
+Integrate Invariant into your application to eliminate bot traffic and Sybil attacks.
+
+### Integration Flow
+
+```mermaid
+sequenceDiagram
+    participant U as End User
+    participant P as Partner App (Game/Social)
+    participant S as Invariant SDK
+    participant N as Invariant Node
+
+    U->>P: 1. Request High-Trust Action
+    P->>S: 2. Request Hardware Proof
+    S->>U: 3. Prompt for Device Check (Tap)
+    U->>S: 4. Signs with Secure Enclave
+    S->>N: 5. Forward Proof for Validation
+    N-->>P: 6. Identity Manifest (Trust Tier: Titanium)
+    P->>U: 7. Action Permitted
+
+```
+
+### Implementation Example
+
+```rust
+// Example: Verifying an Invariant Identity in your Backend
+let is_valid = invariant_sdk::verify(
+    &user_identity_id,
+    &attestation_proof
+).await?;
+
+if is_valid.tier == "TITANIUM" {
+    // Grant high-trust access (e.g., Ranked Matchmaking, Airdrop)
+}
+
+```
 
 ---
 
 ## 🗺️ Roadmap
 
-1. **Phase 1 (Current):** Testnet & stress-test Sybil-resistance.  
-2. **Phase 2:** Partner integrations for bot-free services.  
-3. **Phase 3:** Mainnet & decentralized governance layer leveraging Continuity Scores.
+* [x] **Phase 1:** Core Rust Engine & Attestation Logic.
+* [ ] **Phase 2:** B2B SDK Product Hunt Launch (In Progress).
+* [ ] **Phase 3:** Pilot Launch in High-Bot Environments.
+* [ ] **Phase 4:** Decentralized Validation Network.
 
 ---
 
-## A Note on Value
+## 🛡️ License
 
-Invariant is not a financial instrument—it is a **mathematically auditable proof of human existence**. Early participants help shape the foundation of a trustworthy digital ecosystem.
+Invariant Protocol is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 
-**Stand on Invariant.**
+* Non-production use is permitted.
+* Production use for more than 1,000 MAU requires a commercial license.
+* Converts to **Apache 2.0** on January 1, 2030.
 
-[Download Release](https://invariantprotocol.com/pilot) | [Read Whitepaper](https://invariantprotocol.com/whitepaper) | [View Source Code](https://github.com/KarmaYama/invariant-monorepo/tree/main/crates/invariant_engine)
+[Download Release](https://invariantprotocol.com/pilot) | [Whitepaper](https://invariantprotocol.com/whitepaper) | [Source](https://www.google.com/search?q=https://github.com/KarmaYama/invariant-monorepo)
+
+*Copyright © 2026 Invariant Protocol. Built with Rust and Iron.*
 
 ---
-
-*Copyright © 2025 Invariant Protocol. Built with Rust, Flutter, and Cryptography.*
