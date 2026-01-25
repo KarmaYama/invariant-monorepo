@@ -1,7 +1,5 @@
-// clients/invariant_mobile/lib/screens/auth_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../api_client.dart';
 import 'identity_card.dart';
@@ -14,8 +12,10 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+  // ⚡ NATIVE CHANNEL ONLY
+  // We no longer use 'local_auth' here. The native plugin handles the UI.
   static const platform = MethodChannel('com.invariant.protocol/keystore');
-  final LocalAuthentication auth = LocalAuthentication();
+  
   final client = InvariantClient();
   final _storage = const FlutterSecureStorage();
   
@@ -27,8 +27,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _controller = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 2)
+    )..repeat(reverse: true);
+    
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut)
+    );
   }
 
   @override
@@ -37,23 +43,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
+  // ⚡ TRIGGER POINT
+  // We skip Flutter-side auth entirely. We go straight to the native layer.
   Future<void> _handleBiometricInit() async {
-    try {
-      final bool didAuth = await auth.authenticate(
-        localizedReason: 'Generate Identity Key',
-        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true),
-      );
-      if (didAuth) await _performGenesisOrRecovery();
-    } on PlatformException catch (e) {
-      setState(() => _status = "AUTH ERROR: ${e.message}");
-    }
+    await _performGenesisOrRecovery();
   }
 
   Future<void> _performGenesisOrRecovery() async {
     setState(() { _isLoading = true; _status = "CONNECTING..."; });
 
     try {
-      // 1. Get Nonce
+      // 1. Get Nonce (Network Check First)
       final nonce = await client.getGenesisChallenge();
       if (nonce == null) {
          setState(() => _status = "SERVER UNREACHABLE");
@@ -61,22 +61,32 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
          return;
       }
 
-      // 2. CHECK FOR EXISTING KEY (Recovery Mode)
+      // 2. CHECK FOR EXISTING KEY (Native)
       final bool hasKey = await platform.invokeMethod('hasIdentity');
       
       if (hasKey) {
-        // Try recovery first
+        // Try recovery logic
         bool recoverySuccess = await _tryRecover(nonce);
-        if (recoverySuccess) return; // Success!
+        if (recoverySuccess) return; 
 
-        // If recovery failed (Challenge Mismatch), we MUST rotate the key.
+        // If recovery fails, we assume key is stale/broken
         setState(() => _status = "KEY STALE. ROTATING...");
         await Future.delayed(const Duration(seconds: 1));
       }
 
-      // 3. GENERATE NEW KEY (Destructive Rotation)
+      // 3. GENERATE NEW KEY (Native UI Triggered Here)
+      // This call will open the Android BiometricPrompt.
       await _generateAndRegister(nonce);
 
+    } on PlatformException catch (e) {
+      // Handle User Cancellation or Lockout
+      if (e.code == "AUTH_ERROR") {
+        setState(() => _status = "AUTH CANCELED");
+      } else if (e.code == "DEVICE_INSECURE") {
+        setState(() => _status = "SET LOCK SCREEN");
+      } else {
+        setState(() => _status = "HARDWARE ERROR: ${e.message}");
+      }
     } catch (e) {
       setState(() => _status = "ERROR: $e");
     } finally {
@@ -87,6 +97,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   Future<bool> _tryRecover(String nonce) async {
     setState(() => _status = "RECOVERING HARDWARE KEY...");
     try {
+      // Does not require Auth for Public Key retrieval
       final data = await platform.invokeMethod('recoverIdentity');
       return await _registerOnServer(data, nonce);
     } catch (e) {
@@ -96,11 +107,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _generateAndRegister(String nonce) async {
-    setState(() => _status = "FORGING NEW KEY...");
+    setState(() => _status = "WAITING FOR BIOMETRICS...");
     
-    // ⚠️ CRITICAL FIX: Encode Nonce as Bytes for Native Layer
+    // Convert Nonce to Bytes
     final nonceBytes = InvariantClient.hexToBytes(nonce);
 
+    // ⚡ BLOCKS HERE UNTIL USER AUTHENTICATES NATIVELY
     final data = await platform.invokeMethod('generateIdentity', {
       'nonce': nonceBytes 
     });

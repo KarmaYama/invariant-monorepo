@@ -1,12 +1,29 @@
 # Invariant Protocol
 
-### The Hardware-Bound Identity Anchor for a Post-AI World
+### Hardware-Rooted Identity Infrastructure
+
+---
+
+## 📖 Overview
+
+Invariant is a protocol for establishing **high-fidelity, hardware-rooted Sybil resistance**. It leverages Trusted Execution Environments (TEEs) and Android KeyStore attestation to bind digital identifiers to physical silicon.
+
+By enforcing cryptographic proofs of device provenance at the hardware level, Invariant raises the marginal cost of account forgery from the cost of software (near zero) to the cost of physical hardware acquisition.
+
+### System Guarantees
+
+Invariant enforces the following strict system properties:
+
+1. **Non-Exportability:** Private keys are generated inside the Secure Element (SE) or TEE and are marked `sensitive`. They never leave the secure hardware boundary.
+2. **OS Integrity:** Attestation is only valid if the device bootloader state is `LOCKED` and the `VerifiedBootState` is `VERIFIED`.
+3. **Unlinkability:** Identities are scoped to the partner application. Invariant does not maintain a global graph of user activity across disparate services.
+4. **Fail-Closed:** Any deviation in the X.509 certificate chain, root of trust signature, or nonce mismatch results in immediate rejection.
 
 ---
 
 ## 🏗 System Architecture
 
-Invariant operates as a decentralized infrastructure layer. It bridges the gap between physical silicon and digital identity through high-fidelity hardware attestation.
+The protocol operates as a decentralized verification layer composed of three primary subsystems: client-side hardware orchestration, the attestation engine, and the persistence layer.
 
 ```mermaid
 graph TD
@@ -35,9 +52,9 @@ graph TD
 
 ---
 
-## 🔐 The Genesis Protocol (Remote Attestation)
+## 🔐 Remote Attestation (Genesis)
 
-The "Genesis" event is a cryptographic handshake that proves a user is a unique human with a genuine, untampered device. This creates an economic barrier that makes large-scale emulation computationally and financially unviable.
+The "Genesis" event is the initial binding of a device to the network. It utilizes the Android KeyStore Attestation extension to prove device authenticity without relying on software-level checks which can be spoofed by emulators or dynamic instrumentation frameworks (e.g., Frida).
 
 ```mermaid
 sequenceDiagram
@@ -67,47 +84,51 @@ sequenceDiagram
 
 ---
 
-## ⚔️ Threat Model
+## ⚔️ Threat Model & Security Boundaries
 
-Invariant is designed to solve **Digital Sybil Attacks**, not physical security. We explicitly map our defenses as follows:
+Invariant addresses **Digital Sybil Attacks** via hardware constraints. The following table defines the scope of protection and acknowledged limitations.
 
-| Attack Vector | Status | Mechanism |
+| Attack Vector | Status | Enforcement Mechanism |
 | --- | --- | --- |
-| **Emulator Farms** | 🛡️ **Blocked** | Missing valid Hardware Root of Trust signatures. |
-| **Rooted Devices** | 🛡️ **Blocked** | Bootloader state verification (`VerifiedBootState`). |
-| **Man-in-the-Middle** | 🛡️ **Blocked** | Challenge-Response Nonce bound to the TEE signature. |
-| **Device Resale** | ⚠️ **Mitigated** | **Continuity Score** decay requires constant active possession. |
-| **Physical Theft** | ❌ **Out of Scope** | Relies on device OS security (PIN/Biometrics). |
+| **Emulator Farms** | 🛡️ **Blocked** | Absence of valid OEM Root of Trust signatures in the certificate chain. |
+| **Rooted/Compromised OS** | 🛡️ **Blocked** | Verification of `VerifiedBootState` and `deviceLocked` ASN.1 tags. |
+| **Replay Attacks** | 🛡️ **Blocked** | Server-issued nonces are cryptographically bound to the TEE signature. |
+| **Device Resale** | ⚠️ **Mitigated** | **Continuity Score** decay forces active possession; reputation is not permanent. |
+| **Physical Coercion/Theft** | ❌ **Out of Scope** | The protocol verifies the device, not the operator. Device-level auth (PIN/Bio) is relied upon. |
 
 ---
 
-## ⚡ Why Invariant?
+## ⚖️ Economic & Security Rationale
 
-The digital world is currently facing an "Identity Inflation" crisis. Invariant solves this by shifting the cost of Sybil attacks from **software (cheap)** to **silicon (expensive)**.
+Identity systems based on probabilistic signals (IP reputation, behavioral biometrics) suffer from false positives and scalability limits. Invariant shifts the verification model to deterministic hardware constraints.
 
-### 1. Hardware-Backed Verification
+### 1. Hardware-Backed Integrity
 
-Unlike traditional 2FA, Invariant verifies the **integrity of the OS**. If the bootloader is unlocked or the device is an emulator, the attestation fails at the cryptographic level.
+Verification occurs at the silicon layer. By validating the certificate chain against the OEM Root of Trust (e.g., Google, Samsung), the protocol ensures the request originates from genuine hardware running a signed, unmodified operating system.
 
-### 2. Trust Decay & Persistence
+### 2. Trust Decay Model
 
-Trust isn't static. Invariant uses a **Continuity Score** maintained by background heartbeats.
+Identity is treated as a temporal state rather than a static flag.
 
-* **Titanium Tier:** Keys stored in a dedicated Secure Element (StrongBox).
-* **Steel Tier:** Keys stored in the standard TEE (TrustZone).
+* **Continuity Score:** A dynamic metric maintained by periodic, encrypted heartbeats.
+* **Tiered Security:**
+* **Titanium:** Backed by a dedicated Secure Element (StrongBox/Titan M).
+* **Steel:** Backed by the primary TEE (TrustZone).
 
-### 3. Privacy & Linkability
 
-Invariant validates **existence**, not demographics.
 
-* **No PII:** No names, emails, or phone numbers are stored.
-* **Scoped Identities:** Partners receive a derived, application-specific identifier. A user cannot be correlated across different applications (e.g., a Game and a DAO) unless they explicitly opt-in to link them.
+### 3. Privacy Preservation
+
+The protocol validates **existence** (is this a unique human?) rather than **identity** (who is this?).
+
+* **Zero PII:** No demographic data is ingested.
+* **Isolation:** Identifiers are pairwise unique to the partner application to prevent cross-service correlation.
 
 ---
 
-## 🚀 Developer Integration (B2B SDK)
+## 🚀 Integration (B2B SDK)
 
-Integrate Invariant into your application to eliminate bot traffic and Sybil attacks.
+The Invariant SDK exposes a stateless verification interface for partner applications.
 
 ### Integration Flow
 
@@ -131,37 +152,37 @@ sequenceDiagram
 ### Implementation Example
 
 ```rust
-// Example: Verifying an Invariant Identity in your Backend
+// Example: Verifying an Invariant Identity via Rust SDK
 let is_valid = invariant_sdk::verify(
     &user_identity_id,
     &attestation_proof
 ).await?;
 
 if is_valid.tier == "TITANIUM" {
-    // Grant high-trust access (e.g., Ranked Matchmaking, Airdrop)
+    // Proceed with high-assurance logic
 }
 
 ```
 
 ---
 
-## 🗺️ Roadmap
+## 🛠 Development Status
 
-* [x] **Phase 1:** Core Rust Engine & Attestation Logic.
-* [ ] **Phase 2:** B2B SDK Product Hunt Launch (In Progress).
-* [ ] **Phase 3:** Pilot Launch in High-Bot Environments.
-* [ ] **Phase 4:** Decentralized Validation (Federated Verifier Nodes).
+* [x] **Core Engine:** Rust Attestation Engine & ASN.1 Parsers.
+* [x] **Testnet:** Mobile Client & Node V1 (Active).
+* [ ] **SDK:** Public B2B SDK Release (Beta).
+* [ ] **Network:** Decentralized Validator Federation.
 
 ---
 
-## 🛡️ License
+## 📄 License
 
 Invariant Protocol is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 
-* Non-production use is permitted.
-* Production use for more than 1,000 MAU requires a commercial license.
-* Converts to **Apache 2.0** on January 1, 2030.
+* **Evaluation:** Non-production use is permitted.
+* **Production:** Use for >1,000 Monthly Active Users (MAU) requires a commercial license.
+* **Change Date:** Converts to **Apache 2.0** on January 1, 2030.
 
-[Download Release](https://invariantprotocol.com/pilot) | [Whitepaper](https://invariantprotocol.com/whitepaper) | [Source](https://www.google.com/search?q=https://github.com/KarmaYama/invariant-monorepo)
+[Download Release](https://invariantprotocol.com/pilot) | [Whitepaper](https://invariantprotocol.com/whitepaper) | [Source Code](https://www.google.com/search?q=https://github.com/KarmaYama/invariant-monorepo)
 
-*Copyright © 2026 Invariant Protocol. Built with Rust and Iron.*
+*Copyright © 2026 Invariant Protocol.*

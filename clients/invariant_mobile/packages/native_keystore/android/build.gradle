@@ -27,7 +27,8 @@ apply plugin: "kotlin-android"
 android {
     namespace = "com.example.native_keystore"
 
-    compileSdk = 36
+    // 34+ is required for Biometric features
+    compileSdk = 36 
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -50,6 +51,11 @@ android {
     dependencies {
         testImplementation("org.jetbrains.kotlin:kotlin-test")
         testImplementation("org.mockito:mockito-core:5.0.0")
+
+        // 🛡️ CRITICAL DEPENDENCIES FOR NATIVE AUTH UI
+        // These are required for BiometricPrompt to work in Kotlin
+        implementation "androidx.biometric:biometric:1.2.0-alpha05"
+        implementation "androidx.appcompat:appcompat:1.6.1"
     }
 
     testOptions {
