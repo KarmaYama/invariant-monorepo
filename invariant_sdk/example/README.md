@@ -1,77 +1,74 @@
-# Invariant SDK
+# Invariant SDK Example App
 
-**Stop Automated Identity Abuse at the Hardware Layer.**
+This example application demonstrates the capabilities of the Invariant SDK. It features a "Terminal" style UI that allows you to simulate different network conditions and device environments to see how the SDK responds.
 
-The Invariant SDK provides a cryptographic interface to the Android Keystore and StrongBox Secure Element. It allows mobile applications to verify that a client is a physical, uncompromised device—not an emulator, server farm, or scripted bot.
+## 🛠️ Getting Started
 
-## ⚡ Key Features
+1.  **Navigate to the example directory:**
+    ```bash
+    cd invariant_sdk/example
+    ```
 
-- **Hardware Attestation:** Deterministic proof that a key lives in the device's Trusted Execution Environment (TEE).
-- **Sybil Resistance:** Elevates the marginal cost of fake account creation from $0.00 to the cost of a physical smartphone.
-- **Zero PII:** No biometrics, phone numbers, or emails are collected. We verify the *silicon*, not the *user*.
-- **Shadow Mode:** Audit your traffic quality silently before enforcing security policies.
+2.  **Install dependencies:**
+    ```bash
+    flutter pub get
+    ```
 
-## 🚀 Installation
+3.  **Run the app:**
+    ```bash
+    flutter run
+    ```
 
-Add the dependency to your `pubspec.yaml`:
+## 🎮 How to Use the Demo
 
-```yaml
-dependencies:
-  invariant_sdk: ^1.0.4
+The app initializes the SDK in **SHADOW MODE** by default. It provides a dropdown menu to toggle between **Real Network** calls and **Simulated** responses.
 
-```
+### 1. Real Network (Default)
+This attempts to perform a real Hardware Attestation with the Invariant Cloud.
+* *Note:* This requires a valid API key and an Android device with a secure lock screen enabled.
+* If running on a simulator, this will likely return `EMULATOR` or fail with a hardware error.
 
-## 🛠️ Quick Start
+### 2. Simulation Modes
+Use the dropdown in the top right to force specific SDK outcomes. This helps you test your UI's reaction to different trust tiers.
 
-### 1. Initialize the SDK
+* **SIM: ALLOW:** Simulates a `STRONGBOX` verified device (Pixel 8 Pro).
+    * *Result:* Green Status (Verified).
+* **SIM: SHADOW:** Simulates a high-risk device (Software-backed) while the SDK is in Shadow Mode.
+    * *Result:* Amber Status (Warning).
+* **SIM: DENY:** Simulates an Emulator detection.
+    * *Result:* Red Status (Blocked).
 
-Initialize the SDK once at the root of your application.
+## 🔍 Key Code Snippets
+
+### Verification Logic (`main.dart`)
+This demonstrates how to handle the `InvariantResult` object properly.
 
 ```dart
-import 'package:invariant_sdk/invariant_sdk.dart';
+final result = await _verifier.verify();
 
-void main() {
-  // During pilot, use the demo key
-  Invariant.initialize(
-    apiKey: "sk_test_pilot_demo",
-    baseUrl: "[https://api.invariantprotocol.com](https://api.invariantprotocol.com)", 
-  );
-  
-  runApp(MyApp());
+switch (result.decision) {
+  case InvariantDecision.allow:
+     // Success
+     print("Verified: ${result.tier}");
+     break;
+  case InvariantDecision.allowShadow:
+     // Risk detected, but allowed via config
+     print("Shadow Allow: ${result.reason}");
+     break;
+  case InvariantDecision.deny:
+     // Blocked
+     print("Blocked: ${result.reason}");
+     break;
 }
 
 ```
 
-### 2. Verify a Device
+### Analyzing the Result
 
-Run attestation at critical checkpoints (Sign Up, Login, or High-Value Transactions).
+The demo includes a "View Manifest" feature. In a real app, you would use this data for analytics:
 
 ```dart
-final result = await Invariant.verifyDevice();
-
-if (result.isVerified) {
-  print("Device Trusted: ${result.riskTier}"); 
-  // riskTier: STRONGBOX (Highest), TEE (Standard)
-} else {
-  print("Access Denied: ${result.error}");
-  // riskTier: EMULATOR, SOFTWARE_ONLY, or ROOTED
-}
-
-```
-
-## 🛡️ Trust Tiers
-
-| Tier | Security Level | Hardware Type |
-| --- | --- | --- |
-| **STRONGBOX** | Highest | Dedicated Secure Element (e.g. Titan M2) |
-| **TEE** | High | ARM TrustZone Isolation |
-| **SOFTWARE** | None | Software-backed (Rejected by Engine) |
-| **EMULATOR** | Critical Risk | Virtualized Environment Detected |
-
-## ⚖️ License
-
-This SDK is licensed under the **Business Source License 1.1 (BSL)**. Non-production and evaluation use is permitted. For production use exceeding 1,000 MAU, please contact Invariant Protocol.
-
----
-
-Copyright © 2026 Invariant Protocol. Built with Rust and Cryptography.
+// Access granular hardware details
+print(result.deviceModel); // e.g. "Pixel 8"
+print(result.bootLocked);  // true/false
+print(result.score);       // 0.0 - 100.0
