@@ -4,16 +4,14 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { Copy, CheckCircle2, AlertTriangle, Shield, Server } from "lucide-react";
+import { Copy, CheckCircle2, AlertTriangle, Shield, Server, Terminal, Activity } from "lucide-react";
 
-// --- NAVIGATION STRUCTURE ---
 const SECTIONS = [
   { id: "quickstart", label: "Quickstart" },
+  { id: "simulation", label: "Simulation & Testing" }, // New Section
   { id: "architecture", label: "Architecture" },
-  { id: "integration", label: "Integration Patterns" },
   { id: "api-reference", label: "API Reference" },
   { id: "errors", label: "Error Handling" },
-  { id: "testing", label: "Testing & QA" },
   { id: "compliance", label: "Privacy & Compliance" },
 ];
 
@@ -38,11 +36,9 @@ export default function Docs() {
     <div className="bg-[#050505] text-white selection:bg-[#00FFC2] selection:text-black font-sans min-h-screen flex flex-col">
       <Header />
 
-      {/* WRAPPER: Flex container handling the sidebar/main layout */}
       <div className="flex-1 w-full max-w-7xl mx-auto flex pt-24 px-6 relative">
         
-        {/* --- SIDEBAR NAV (STICKY FIX) --- */}
-        {/* Changed 'fixed' to 'sticky' so it respects the footer boundary */}
+        {/* --- SIDEBAR NAV --- */}
         <aside className="hidden lg:block w-64 shrink-0 sticky top-24 self-start h-[calc(100vh-8rem)] overflow-y-auto border-r border-white/10 pt-4 pb-12 no-scrollbar">
           <div className="pr-6">
             <h4 className="font-serif text-white mb-6 text-lg">Invariant SDK</h4>
@@ -64,7 +60,7 @@ export default function Docs() {
             
             <div className="mt-12 px-4 pt-8 border-t border-white/10">
               <div className="text-xs font-mono text-white/40 mb-2">SDK VERSION</div>
-              <div className="text-sm font-mono text-white">v1.0.4 (Stable)</div>
+              <div className="text-sm font-mono text-white">v0.1.0 (Pilot)</div>
             </div>
           </div>
         </aside>
@@ -74,112 +70,137 @@ export default function Docs() {
           
           <div className="mb-20 pb-8 border-b border-white/10">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-[#00FFC2]/10 text-[#00FFC2] font-mono text-xs font-bold tracking-wider mb-6">
-              ANDROID NATIVE • FLUTTER
+              ANDROID • FLUTTER • RUST
             </div>
             <h1 className="text-5xl font-serif mb-6">Hardware Verification</h1>
             <p className="text-xl text-white/60 font-light leading-relaxed max-w-3xl">
-              The Invariant SDK allows you to verify that a client device is a physical Android handset with a secure hardware keystore. It detects emulators, server farms, and rooted environments deterministically.
+              The Invariant SDK allows you to verify that a client device is a physical Android handset with a secure hardware keystore. It detects emulators, server farms, and rooted environments using the Secure Enclave (TEE).
             </p>
           </div>
 
           {/* 1. QUICKSTART */}
           <Section id="quickstart" title="Quickstart">
             <p className="text-white/70 mb-6">
-              The SDK handles the cryptographic handshake with the device's Secure Enclave (TEE). You receive a single `InvariantResult` object containing the risk assessment.
+              The SDK handles the cryptographic handshake. You receive a structured `InvariantResult` containing a definitive <strong>Decision</strong> and a granular <strong>Risk Score</strong>.
             </p>
             
             <div className="space-y-8">
               <div>
                 <h4 className="text-white font-bold mb-2 text-sm font-mono">1. INSTALLATION</h4>
                 <CodeBlock label="pubspec.yaml" code={`dependencies:
-  invariant_sdk: ^1.0.4`} />
+  invariant_sdk: ^0.1.0`} />
               </div>
 
               <div>
                 <h4 className="text-white font-bold mb-2 text-sm font-mono">2. USAGE</h4>
                 <CodeBlock label="main.dart" code={`import 'package:invariant_sdk/invariant_sdk.dart';
 
-// Initialize once (usually in main)
 void main() {
-  Invariant.initialize(apiKey: "sk_live_...");
+  // Initialize with your Publishable Key
+  Invariant.initialize(
+    apiKey: "pk_live_...",
+    mode: InvariantMode.shadow // Use 'enforce' to block bots
+  );
   runApp(MyApp());
 }
 
-// Call verify() at critical checkpoints
 Future<void> onLogin() async {
-  try {
-    final result = await Invariant.verifyDevice();
-    
-    if (result.isVerified) {
-      print("Safe: \${result.riskTier}"); 
-    } else {
-      // Handle Risk: Block or Challenge
-      print("Blocked: \${result.riskTier}");
-    }
-  } catch (e) {
-    // Fail Open recommended for network errors
-    proceedWithLogin();
+  // 1. Run Hardware Attestation
+  final result = await Invariant.verifyDevice();
+
+  // 2. Handle Decision
+  switch (result.decision) {
+    case InvariantDecision.allow:
+      // ✅ Device Verified (Hardware TEE Confirmed)
+      completeLogin();
+      break;
+
+    case InvariantDecision.allowShadow:
+      // ⚠️ Risk Detected but Allowed (Shadow Mode)
+      // Log this event to your analytics
+      logRisk(result.riskScore, result.reason);
+      completeLogin();
+      break;
+
+    case InvariantDecision.deny:
+      // ⛔ Blocked (Emulator / Rooted / Clone)
+      showBlockScreen(reason: result.reason);
+      break;
   }
 }`} />
               </div>
             </div>
           </Section>
 
-          {/* 2. ARCHITECTURE */}
-          <Section id="architecture" title="Architecture">
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
+          {/* 2. SIMULATION & TESTING */}
+          <Section id="simulation" title="Simulation & Testing">
+            <p className="text-white/70 mb-6">
+              You don't need a physical device farm to test your UI. The SDK includes a simulation mode for development.
+            </p>
+            <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white/5 p-6 rounded border border-white/10">
-                <Shield className="text-[#00FFC2] mb-4" size={24} />
-                <h4 className="text-lg font-bold text-white mb-2">The Handshake</h4>
-                <p className="text-sm text-white/60 leading-relaxed">
-                  1. SDK requests a cryptographic nonce from Invariant.<br/>
-                  2. Device generates a P-256 KeyPair inside the TEE.<br/>
-                  3. TEE signs the nonce + timestamp.<br/>
-                  4. Invariant backend validates the Google Root of Trust chain.
+                <Terminal className="text-[#00FFC2] mb-4" size={24} />
+                <h4 className="text-white font-bold mb-2">Simulated Scenarios</h4>
+                <p className="text-sm text-white/60 mb-4">
+                  The Example App allows you to toggle between network modes to verify your UI's reaction to different threat levels.
                 </p>
+                <ul className="text-sm text-white/50 space-y-2 list-disc pl-4">
+                  <li><strong>Real Network:</strong> Actual TEE Handshake.</li>
+                  <li><strong>Force Allow:</strong> Simulates a clean Pixel 8.</li>
+                  <li><strong>Force Shadow:</strong> Simulates a risk event in audit mode.</li>
+                  <li><strong>Force Deny:</strong> Simulates an emulator block.</li>
+                </ul>
               </div>
               <div className="bg-white/5 p-6 rounded border border-white/10">
-                <Server className="text-[#00FFC2] mb-4" size={24} />
-                <h4 className="text-lg font-bold text-white mb-2">Performance</h4>
-                <p className="text-sm text-white/60 leading-relaxed">
-                  Hardware key generation is computationally expensive.
-                  <br/><br/>
-                  <span className="text-white">• Pixel 6+ (Titan M2):</span> ~200ms<br/>
-                  <span className="text-white">• Samsung S23 (Knox):</span> ~300ms<br/>
-                  <span className="text-white">• Low-end Devices:</span> up to 800ms
+                <Activity className="text-[#00FFC2] mb-4" size={24} />
+                <h4 className="text-white font-bold mb-2">Fail-Open Design</h4>
+                <p className="text-sm text-white/60 mb-4">
+                  If the Invariant Cloud is unreachable, the SDK defaults to <code>allow</code> with the tier <code>UNVERIFIED_TRANSIENT</code>.
+                </p>
+                <p className="text-sm text-white/60">
+                  This ensures legitimate users are never blocked due to network outages or server maintenance.
                 </p>
               </div>
             </div>
-            <Callout type="warning">
-              This is a network-bound operation. Always show a loading state (e.g. spinner) while awaiting the result. Do not block the UI thread.
-            </Callout>
           </Section>
 
-          {/* 3. INTEGRATION PATTERNS */}
-          <Section id="integration" title="Integration Patterns">
-            <h3 className="text-xl text-white mb-4 font-serif">When to Verify</h3>
-            <div className="space-y-6">
-              <Pattern 
-                title="On Signup (Recommended)" 
-                desc="Prevent bot accounts from ever being created. High impact, low friction."
-                code="await Invariant.verifyDevice(); // Before creating user DB entry"
-              />
-              <Pattern 
-                title="On High-Value Transaction" 
-                desc="Verify hardware presence before withdrawals or sensitive data access."
-                code="if (amount > 1000) await Invariant.verifyDevice();"
-              />
-              <Pattern 
-                title="Shadow Mode (Audit)" 
-                desc="Call verify() but ignore the result. Log the data to Analytics to measure fraud levels before enforcing blocks."
-                code="Analytics.log('verification_result', result.riskTier);"
-              />
+          {/* 3. ARCHITECTURE */}
+          <Section id="architecture" title="Architecture">
+            <div className="mb-8">
+              <h4 className="text-lg font-bold text-white mb-4">Hybrid Trust Model</h4>
+              <p className="text-white/70 leading-relaxed mb-6">
+                Invariant prioritizes <strong>Security</strong> first, then <strong>User Experience</strong>. 
+                Some devices (e.g., budget Samsungs) have a secure TEE but refuse to sign metadata like "Model Name".
+              </p>
+              <div className="bg-black/50 p-6 rounded border border-white/10 space-y-4">
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#00FFC2] flex items-center justify-center text-black font-bold shrink-0">1</div>
+                  <div>
+                    <h5 className="text-white font-bold">Hardware Handshake</h5>
+                    <p className="text-sm text-white/60">The TEE generates a key pair and signs a nonce. If this fails (Emulator), we block.</p>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#00FFC2]/20 text-[#00FFC2] flex items-center justify-center font-bold shrink-0">2</div>
+                  <div>
+                    <h5 className="text-white font-bold">Metadata Enrichment</h5>
+                    <p className="text-sm text-white/60">If the TEE signature includes the Model Name, we use it. If not, we fallback to the OS-reported name.</p>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#00FFC2]/20 text-[#00FFC2] flex items-center justify-center font-bold shrink-0">3</div>
+                  <div>
+                    <h5 className="text-white font-bold">Policy Decision</h5>
+                    <p className="text-sm text-white/60">The server validates the chain against the Google Root CA and issues a decision (Allow/Deny).</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </Section>
 
           {/* 4. API REFERENCE */}
           <Section id="api-reference" title="API Reference">
-            <p className="text-white/60 mb-6">The `InvariantResult` object is the single source of truth.</p>
+            <p className="text-white/60 mb-6">The `InvariantResult` object.</p>
             
             <div className="border border-white/10 rounded overflow-hidden">
               <table className="w-full text-left text-sm">
@@ -192,110 +213,60 @@ Future<void> onLogin() async {
                 </thead>
                 <tbody className="divide-y divide-white/5 text-white/80 font-mono">
                   <tr>
-                    <td className="p-4 text-white">isVerified</td>
-                    <td className="p-4 text-white/50">bool</td>
-                    <td className="p-4 font-sans text-white/60">True ONLY if the device is a valid physical Android with TEE.</td>
+                    <td className="p-4 text-white">decision</td>
+                    <td className="p-4 text-white/50">enum</td>
+                    <td className="p-4 font-sans text-white/60">
+                      <code>allow</code>, <code>allowShadow</code>, or <code>deny</code>. Use this for control flow.
+                    </td>
                   </tr>
                   <tr>
-                    <td className="p-4 text-white">riskTier</td>
+                    <td className="p-4 text-white">score</td>
+                    <td className="p-4 text-white/50">double</td>
+                    <td className="p-4 font-sans text-white/60">Risk Score (0.0 = Safe, 100.0 = Bot).</td>
+                  </tr>
+                  <tr>
+                    <td className="p-4 text-white">tier</td>
                     <td className="p-4 text-white/50">string</td>
-                    <td className="p-4 font-sans text-white/60">The specific classification (see below).</td>
+                    <td className="p-4 font-sans text-white/60">The hardware classification (see below).</td>
                   </tr>
                   <tr>
-                    <td className="p-4 text-white">identityId</td>
+                    <td className="p-4 text-white">reason</td>
                     <td className="p-4 text-white/50">string?</td>
-                    <td className="p-4 font-sans text-white/60">Ephemeral session ID for server-side audit logs.</td>
+                    <td className="p-4 font-sans text-white/60">Diagnostic reason for denial or shadow flag.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            <h4 className="text-lg font-serif text-white mt-12 mb-6">Risk Tiers (Enum)</h4>
+            <h4 className="text-lg font-serif text-white mt-12 mb-6">Trust Tiers</h4>
             <div className="space-y-3">
               <RiskTier 
-                code="STRONGBOX" 
+                code="TITANIUM" 
                 color="text-[#00FFC2]" 
-                desc="Gold Standard. Key generated in a discrete Secure Element (Titan M, Knox Vault). Cannot be cloned or extracted." 
+                desc="StrongBox. Dedicated Secure Element (Titan M2, Knox Vault). Highest security." 
               />
               <RiskTier 
-                code="PHYSICAL_TEE" 
+                code="STEEL" 
                 color="text-white" 
-                desc="Standard. Valid physical device using ARM TrustZone. Safe for 99% of use cases." 
+                desc="TEE. Standard ARM TrustZone execution. Safe for most use cases." 
               />
               <RiskTier 
-                code="SOFTWARE_ONLY" 
+                code="SOFTWARE" 
                 color="text-amber-500" 
-                desc="Weak. Device lacks hardware attestation or is running an old OS. Keys stored in software." 
+                desc="Weak. Key generated in Android OS software. Not hardware-backed." 
               />
               <RiskTier 
                 code="EMULATOR" 
                 color="text-red-500" 
-                desc="Critical. Environment is virtualized (Bluestacks, AWS Device Farm). Block immediately." 
-              />
-              <RiskTier 
-                code="ROOTED" 
-                color="text-red-500" 
-                desc="Critical. Bootloader is unlocked or OS integrity check failed." 
+                desc="Critical. Virtualization detected. Immediate block." 
               />
             </div>
           </Section>
 
-          {/* 5. ERROR HANDLING */}
-          <Section id="errors" title="Error Handling">
-            <p className="text-white/60 mb-6">
-              The SDK separates <strong>Verification Failures</strong> (Bot detected) from <strong>System Errors</strong> (Network down).
-            </p>
-            <div className="bg-[#0A0A0A] border border-white/10 rounded p-6 font-mono text-sm space-y-4">
-              <ErrorItem 
-                code="HARDWARE_FAILURE" 
-                desc="The device Keystore is crashing or busy. Retry once." 
-              />
-              <ErrorItem 
-                code="NETWORK_ERROR" 
-                desc="Invariant API unreachable. Recommend Fail-Open (Allow user)." 
-              />
-              <ErrorItem 
-                code="REJECTED_BY_POLICY" 
-                desc="Valid device, but blocked by server blacklist (e.g. known fraud farm)." 
-              />
-            </div>
-          </Section>
-
-          {/* 6. TESTING */}
-          <Section id="testing" title="Testing & QA">
-            <p className="text-white/70 mb-6">
-              How to verify your integration without buying 50 phones.
-            </p>
-            
-            <div className="space-y-6">
-              <div className="p-6 border border-white/10 rounded bg-white/5">
-                <h4 className="text-white font-bold mb-2">Simulating Emulators</h4>
-                <p className="text-sm text-white/60 mb-4">
-                  Run your app on the standard <strong>Android Studio Emulator</strong>. 
-                  Invariant will automatically detect the lack of TEE and return:
-                </p>
-                <code className="block bg-black/50 p-2 rounded text-red-400 font-mono text-sm">
-                  riskTier: "EMULATOR", isVerified: false
-                </code>
-              </div>
-
-              <div className="p-6 border border-white/10 rounded bg-white/5">
-                <h4 className="text-white font-bold mb-2">Simulating Success</h4>
-                <p className="text-sm text-white/60 mb-4">
-                  You must use a <strong>Physical Device</strong> (Pixel, Samsung, etc.) to get a <code>PHYSICAL_TEE</code> result.
-                  The Android Emulator <i>cannot</i> simulate a Secure Element cryptographically.
-                </p>
-              </div>
-            </div>
-          </Section>
-
-          {/* 7. COMPLIANCE */}
+          {/* 5. PRIVACY */}
           <Section id="compliance" title="Privacy & Compliance">
-            <p className="text-white/70 mb-6">
-              Copy this text for your Legal/Compliance team.
-            </p>
             <div className="bg-white/5 p-8 rounded border border-white/10 italic text-white/60 leading-relaxed text-sm">
-              "Our application uses the Invariant Protocol for fraud prevention. This system verifies the integrity of the device hardware using the Android Keystore System. The process generates a cryptographic attestation chain which is sent to Invariant servers for validation. No personally identifiable information (PII) such as biometric data, names, phone numbers, or persistent hardware identifiers (IMEI/Serial) is collected, stored, or transmitted during this process."
+              "Invariant uses the Android Keystore System to verify device integrity. This process creates a cryptographic proof of hardware backing. It does NOT collect biometrics, phone numbers, or persistent identifiers (IMEI/AdID) that could track users across apps. The verification is stateless and privacy-preserving."
             </div>
           </Section>
 
