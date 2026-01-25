@@ -1,19 +1,27 @@
 // invariant_sdk/lib/invariant_sdk.dart
 library invariant_sdk;
 
-import 'package:flutter/services.dart'; // Required for MethodChannel
+import 'package:flutter/services.dart';
 import 'package:invariant_sdk/src/api_client.dart';
 
 /// The operational mode of the Invariant SDK.
 enum InvariantMode {
+  /// The SDK will return [InvariantDecision.deny] when verification fails.
   enforce,
+  /// The SDK will return [InvariantDecision.allowShadow] when verification fails,
+  /// allowing the user to proceed while logging the risk signal.
   shadow,
 }
 
 /// The authoritative decision from the Invariant Policy Engine.
 enum InvariantDecision {
+  /// The device is verified and trusted. Proceed with the protected action.
   allow,
+  /// The device failed verification, but the SDK is in [InvariantMode.shadow].
+  /// Proceed with the action but flag the transaction/session for review.
   allowShadow,
+  /// The device failed verification and the SDK is in [InvariantMode.enforce].
+  /// Block the action.
   deny,
 }
 
@@ -41,17 +49,31 @@ class InvariantResult {
 
   bool get isVerified => decision == InvariantDecision.allow;
 
-  factory InvariantResult.fromJson(Map<String, dynamic> json, InvariantMode mode) {
+  /// Constructs the result from the Server API response.
+  /// 
+  /// [fallbackBrand], [fallbackModel], and [fallbackProduct] are populated from 
+  /// the Android OS (Build.MODEL) if the TEE signature omits them.
+  factory InvariantResult.fromServer(
+    Map<String, dynamic> json, 
+    InvariantMode mode,
+    {String? fallbackBrand, String? fallbackModel, String? fallbackProduct}
+  ) {
+    // 1. Extract Core Signals
     final bool isVerified = json['verified'] ?? false;
     final String tier = json['tier'] ?? 'UNKNOWN';
     final double score = (json['risk_score'] as num?)?.toDouble() ?? 100.0;
     
-    final String? brand = json['brand'];
-    final String? deviceModel = json['device_model']; 
-    final String? product = json['product'];
+    // 2. Extract Rich Hardware Manifest with Hybrid Fallback
+    // If the server saw Hardware Attestation IDs, use them.
+    // Otherwise, use the software metadata we grabbed from the OS.
+    final String? brand = json['brand'] ?? fallbackBrand;
+    final String? deviceModel = json['device_model'] ?? fallbackModel; 
+    final String? product = json['product'] ?? fallbackProduct;
+    
     final bool bootLocked = json['boot_locked'] ?? false;
     final String? error = json['error'];
 
+    // 3. Derive Decision
     InvariantDecision decision;
     if (isVerified) {
       decision = InvariantDecision.allow;
@@ -90,6 +112,7 @@ class Invariant {
   // ⚡ REAL HARDWARE CHANNEL
   static const MethodChannel _channel = MethodChannel('com.invariant.protocol/keystore');
 
+  /// Initialize the Invariant SDK.
   static void initialize({
     required String apiKey,
     InvariantMode mode = InvariantMode.shadow,
@@ -99,6 +122,7 @@ class Invariant {
     _client = ApiClient(apiKey: apiKey, baseUrl: baseUrl);
   }
 
+  /// Performs a hardware-backed device verification ("Secure Tap").
   static Future<InvariantResult> verifyDevice() async {
     try {
       final client = _client;
@@ -120,10 +144,9 @@ class Invariant {
       // 2. Hardware Signature (Native Call)
       Map<dynamic, dynamic> hardwareResult;
       try {
-        // 🚀 CRITICAL: Invoking the Kotlin code here
+        // Invokes Kotlin: generateIdentity(nonce)
         hardwareResult = await _channel.invokeMethod('generateIdentity', {'nonce': nonce});
       } on PlatformException catch (e) {
-        // Handle specific hardware errors (e.g. Device not secure)
         return InvariantResult(
           decision: (_mode == InvariantMode.shadow) ? InvariantDecision.allowShadow : InvariantDecision.deny,
           tier: "SOFTWARE_ERROR",
@@ -134,8 +157,8 @@ class Invariant {
 
       // 3. Construct Payload with REAL Hardware Data
       final payload = {
-        "public_key": hardwareResult['publicKey'],         // List<int> from Kotlin
-        "attestation_chain": hardwareResult['attestationChain'], // List<List<int>> from Kotlin
+        "public_key": hardwareResult['publicKey'],         // List<int>
+        "attestation_chain": hardwareResult['attestationChain'], // List<List<int>>
         "nonce": client.hexToBytes(nonce),
       };
 
@@ -143,7 +166,14 @@ class Invariant {
       final resultData = await client.verify(payload);
 
       if (resultData != null) {
-        return InvariantResult.fromJson(resultData, _mode);
+        // 🚀 HYBRID TRUST: Pass the software fallbacks to the factory
+        return InvariantResult.fromServer(
+          resultData, 
+          _mode,
+          fallbackBrand: hardwareResult['softwareBrand'],
+          fallbackModel: hardwareResult['softwareModel'],
+          fallbackProduct: hardwareResult['softwareProduct'],
+        );
       } else {
         return InvariantResult.failOpen("Verification Service Error");
       }
