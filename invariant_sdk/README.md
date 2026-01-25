@@ -1,17 +1,53 @@
 # Invariant SDK
 
-**Stop Automated Identity Abuse at the Hardware Layer.**
+**The Hardware-Bound Identity Layer for Flutter.**
 
-The Invariant SDK provides a cryptographic interface to the Android Keystore and StrongBox Secure Element. It allows mobile applications to verify that a client is a physical, uncompromised device—not an emulator, server farm, or scripted bot.
+[![Pub](https://img.shields.io/pub/v/invariant_sdk.svg)](https://pub.dev/packages/invariant_sdk)
+[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE.md)
+[![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 
-## ⚡ Key Features
+Invariant provides cryptographic proof that a user is operating a physical, uncompromised device. It eliminates emulators, server farms, and scripted bots by validating the **Trusted Execution Environment (TEE)** at the silicon layer.
 
-- **Hardware Attestation:** Deterministic proof that a key lives in the device's Trusted Execution Environment (TEE).
-- **Sybil Resistance:** Elevates the marginal cost of fake account creation from $0.00 to the cost of a physical smartphone.
-- **Zero PII:** No biometrics, phone numbers, or emails are collected. We verify the *silicon*, not the *user*.
-- **Shadow Mode:** Audit your traffic quality silently before enforcing security policies.
+Unlike behavioral analytics or CAPTCHAs, Invariant is deterministic. It does not collect PII, biometrics, or behavioral data.
 
-## 🚀 Installation
+---
+
+## 🏗 Architecture
+
+The SDK orchestrates a "Hardware Handshake" between your application, the device's Secure Element, and the Invariant Verification Node.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App
+    participant SDK as Invariant SDK
+    participant TEE as Android Keystore
+    participant Node as Invariant Cloud
+
+    User->>App: Action (Login/Signup)
+    App->>SDK: verifyDevice()
+    SDK->>Node: 1. Request Challenge (Nonce)
+    Node-->>SDK: Nonce
+    SDK->>TEE: 2. Generate Key & Sign(Nonce)
+    Note right of TEE: Operations occur inside<br/>isolated hardware.<br/>OS cannot interfere.
+    TEE-->>SDK: Attestation Chain + Signature
+    SDK->>Node: 3. Verify Chain & Root of Trust
+    Node-->>SDK: Verification Result (Risk Tier)
+    SDK-->>App: InvariantResult
+    
+    alt isAllowed
+        App->>User: Access Granted
+    else denied
+        App->>User: Block / Step-Up Auth
+    end
+
+```
+
+---
+
+## 🚀 Integration
+
+### 1. Installation
 
 Add the dependency to your `pubspec.yaml`:
 
@@ -21,20 +57,18 @@ dependencies:
 
 ```
 
-## 🛠️ Quick Start
+### 2. Initialization
 
-### 1. Initialize the SDK
-
-Initialize the SDK once at the root of your application.
+Initialize the SDK at the root of your application. We recommend starting in **Shadow Mode** to audit your traffic without affecting users.
 
 ```dart
 import 'package:invariant_sdk/invariant_sdk.dart';
 
 void main() {
-  // During pilot, use the demo key
   Invariant.initialize(
-    apiKey: "sk_test_pilot_demo",
-    baseUrl: "[https://api.invariantprotocol.com](https://api.invariantprotocol.com)", 
+    apiKey: "YOUR_API_KEY",
+    // start in shadow mode to log threats without blocking
+    mode: InvariantMode.shadow, 
   );
   
   runApp(MyApp());
@@ -42,36 +76,79 @@ void main() {
 
 ```
 
-### 2. Verify a Device
+### 3. Verification
 
-Run attestation at critical checkpoints (Sign Up, Login, or High-Value Transactions).
+Call `verifyDevice()` at critical checkpoints (e.g., Registration, High-Value Transactions).
 
 ```dart
 final result = await Invariant.verifyDevice();
 
-if (result.isVerified) {
-  print("Device Trusted: ${result.riskTier}"); 
-  // riskTier: STRONGBOX (Highest), TEE (Standard)
+if (result.isAllowed) {
+  // Device is Verified (or System Failed-Open).
+  // Safe to proceed.
+  _completeLogin();
 } else {
-  print("Access Denied: ${result.error}");
-  // riskTier: EMULATOR, SOFTWARE_ONLY, or ROOTED
+  // Threat Detected (Emulator, Rooted, or Policy Violation).
+  // Block access.
+  _showBlockScreen(result.riskTier);
 }
 
 ```
 
-## 🛡️ Trust Tiers
+---
 
-| Tier | Security Level | Hardware Type |
+## ⚙️ Configuration & Modes
+
+Invariant supports two operational modes to fit your risk tolerance.
+
+| Mode | Behavior | Use Case |
 | --- | --- | --- |
-| **STRONGBOX** | Highest | Dedicated Secure Element (e.g. Titan M2) |
-| **TEE** | High | ARM TrustZone Isolation |
-| **SOFTWARE** | None | Software-backed (Rejected by Engine) |
-| **EMULATOR** | Critical Risk | Virtualized Environment Detected |
-
-## ⚖️ License
-
-This SDK is licensed under the **Business Source License 1.1 (BSL)**. Non-production and evaluation use is permitted. For production use exceeding 1,000 MAU, please contact Invariant Protocol.
+| `InvariantMode.shadow` | **Audit Only.** Returns `allowed` for all devices, even emulators. Logs the true risk tier to the dashboard. | Initial integration, measuring fraud levels. |
+| `InvariantMode.enforce` | **Active Blocking.** Returns `denied` for emulators or compromised devices. | Production security, anti-bot protection. |
 
 ---
 
-Copyright © 2026 Invariant Protocol. Built with Rust and Cryptography.
+## 🛡️ Risk Tiers
+
+The `riskTier` field indicates the specific hardware classification of the device.
+
+| Tier | Trust Level | Description |
+| --- | --- | --- |
+| **STRONGBOX** | 🟢 Highest | Key generated in a dedicated Secure Element (e.g., Titan M2, Knox Vault). |
+| **TEE** | 🟢 High | Key generated in ARM TrustZone. Standard for modern Android devices. |
+| **SOFTWARE** | 🔴 Critical | Key generated in software. Indicates OS tampering or lack of hardware support. |
+| **EMULATOR** | 🔴 Critical | Virtualized environment detected. Immediate block recommended. |
+
+---
+
+## 🔌 Fail-Open Philosophy
+
+The Invariant SDK is designed to be **Fail-Open**.
+
+If the Invariant Network is unreachable, or if the device encounters a non-security hardware error, the SDK returns `InvariantStatus.allowedFailOpen`.
+
+* **Rationale:** Your infrastructure availability should not depend on ours. Legitimate users should never be blocked due to network partitions.
+* **Recommendation:** Treat `allowedFailOpen` as a success for user experience, but flag the session for backend review if necessary.
+
+---
+
+## ⚠️ Requirements & Compatibility
+
+* **Android 9.0+** (API Level 28+)
+* Device must have a **Secure Lock Screen** (PIN, Pattern, or Biometrics) configured. The TEE requires this to generate auth-bound keys.
+* **iOS / Web:** The SDK returns `allowedFailOpen` on non-Android platforms to ensure cross-platform code compatibility, but verification is **not performed**.
+
+---
+
+## ⚖️ License
+
+Invariant Protocol is licensed under the **Business Source License 1.1 (BSL)**.
+
+* **Evaluation:** Non-production use is permitted.
+* **Production:** Use for >1,000 Monthly Active Users (MAU) requires a commercial license.
+
+[Read Full License](./LICENSE.md)
+
+```
+
+```

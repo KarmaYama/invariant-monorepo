@@ -1,7 +1,7 @@
 # invariant_sdk/pubspec.yaml
 name: invariant_sdk
 description: "Hardware-backed device verification and fraud filtering for the Invariant Protocol."
-version: 1.0.4
+version: 0.1.0
 homepage: https://invariantprotocol.com/docs
 repository: https://github.com/KarmaYama/invariant-monorepo/tree/main/invariant_sdk
 

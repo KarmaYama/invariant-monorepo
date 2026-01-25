@@ -1,4 +1,3 @@
-// crates/invariant_engine/src/attestation.rs
 /*
  * Copyright (c) 2026 Invariant Protocol.
  *
@@ -18,19 +17,15 @@ use std::str;
 /// OID for Android Key Attestation Extension (1.3.6.1.4.1.11129.2.1.17)
 const ANDROID_ATTESTATION_OID: &str = "1.3.6.1.4.1.11129.2.1.17";
 
-// --- TAG CONSTANTS FOR ASN.1 PARSING ---
-// Security Tags
+// --- TAG CONSTANTS ---
 const KM_TAG_NO_AUTH_REQUIRED: u32 = 503;
 const KM_TAG_ROOT_OF_TRUST: u32 = 704;
-
-// Metadata Tags
 const KM_TAG_ATTESTATION_ID_BRAND: u32 = 710;
 const KM_TAG_ATTESTATION_ID_DEVICE: u32 = 711;
 const KM_TAG_ATTESTATION_ID_PRODUCT: u32 = 712;
-const KM_TAG_ATTESTATION_ID_MANUFACTURER: u32 = 716; // Fixed: 716 is Manufacturer
-const KM_TAG_ATTESTATION_ID_MODEL: u32 = 717;        // Fixed: 717 is Model
+const KM_TAG_ATTESTATION_ID_MANUFACTURER: u32 = 716; 
+const KM_TAG_ATTESTATION_ID_MODEL: u32 = 717;
 
-// --- Google Hardware Root (Pinned) ---
 const GOOGLE_HARDWARE_ROOT_PEM: &str = r#"
 -----BEGIN CERTIFICATE-----
 MIIFHDCCAwSgAwIBAgIJAPHBcqaZ6vUdMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
@@ -92,7 +87,7 @@ pub fn validate_attestation_chain(
     // 3. Verify Identity Binding
     let cert_spki = leaf_cert.tbs_certificate.subject_pki.raw;
     if !keys_equal(cert_spki, expected_public_key) {
-        return Err(EngineError::InvalidAttestation("Public Key mismatch. Certificate does not match the key.".into()));
+        return Err(EngineError::InvalidAttestation("Public Key mismatch".into()));
     }
 
     // 4. Extract & Verify Extension
@@ -163,7 +158,7 @@ pub fn verify_extension_and_extract(
         }
     }
 
-    // C. Verify TEE Enforced Authorization List (Index 7)
+    // C. Verify teeEnforced (Index 7)
     let tee_enforced_obj = &items[7];
     let tee_enforced_list = tee_enforced_obj.as_sequence()
         .map_err(|_| EngineError::InvalidAttestation("teeEnforced is not a sequence".into()))?;
@@ -183,15 +178,13 @@ pub fn verify_extension_and_extract(
         // Security Checks
         if tag == KM_TAG_ROOT_OF_TRUST {
             has_root_of_trust = true;
-            if let Ok(content_bytes) = item.as_slice() {
-                // Parse inner SEQUENCE
+            // Recursively parse the SEQUENCE inside
+            if let Ok(content_bytes) = extract_inner_bytes(item) {
                 if let Ok((_, rot_seq_obj)) = parse_der_sequence(content_bytes) {
                     if let Ok(seq) = rot_seq_obj.as_sequence() {
-                         // 0: verifiedBootKey, 1: deviceLocked, 2: verifiedBootState
                         if seq.len() >= 3 {
                             if let Ok(locked) = seq[1].as_bool() { is_boot_locked = locked; }
                             if let Ok(state) = seq[2].as_u32() { 
-                                // 0 = Verified, 1 = SelfSigned
                                 if state == 0 { is_verified_boot = true; } 
                             }
                         }
@@ -203,7 +196,6 @@ pub fn verify_extension_and_extract(
         if tag == KM_TAG_NO_AUTH_REQUIRED { no_auth_required = true; }
 
         // Metadata Extraction
-        // 🚀 FIXED: Robust extraction logic that handles implicit tagging
         if tag == KM_TAG_ATTESTATION_ID_BRAND { brand = extract_string(item); }
         if tag == KM_TAG_ATTESTATION_ID_DEVICE { device = extract_string(item); }
         if tag == KM_TAG_ATTESTATION_ID_PRODUCT { product = extract_string(item); }
@@ -231,46 +223,47 @@ pub fn verify_extension_and_extract(
     Ok(metadata)
 }
 
+// 🚀 FIXED LIFETIME + FIXED MATCH PATTERN
+// This signature works with the borrow checker and der-parser 9.x
+fn extract_inner_bytes<'a>(item: &'a DerObject<'a>) -> Result<&'a [u8], der_parser::error::BerError> {
+    match &item.content {
+        BerObjectContent::OctetString(bytes) => Ok(bytes),
+        
+        // Handle Unknown(Any) wrapper
+        BerObjectContent::Unknown(any) => Ok(any.data), 
+        
+        // 🚀 CRITICAL FIX: Match the 3-element tuple (Class, Tag, Object)
+        // We capture 'inner' at the 3rd position.
+        BerObjectContent::Tagged(_class, _tag, inner) => {
+             // 'inner' is Box<DerObject>, so we dereference it to get &DerObject
+             extract_inner_bytes(&**inner)
+        },
+        _ => item.as_slice()
+    }
+}
+
 // 🚀 ROBUST STRING EXTRACTOR
-// Recursively peels ContextSpecific tags to find the inner OCTET STRING
 fn extract_string(item: &DerObject) -> Option<String> {
-    // 1. Direct match (e.g. it's already an OctetString)
-    if let BerObjectContent::OctetString(bytes) = &item.content {
-        return String::from_utf8(bytes.to_vec()).ok();
-    }
-    
-    // 2. Direct match (UTF8String - rare but possible in some HALs)
-    if let BerObjectContent::UTF8String(s) = &item.content {
-        return Some(s.to_string());
-    }
-
-    // 3. Implicitly Tagged (ContextSpecific)
-    // The parser wrapper often hides the inner content as raw bytes.
-    // We try to re-parse those raw bytes as an OctetString.
-    if let BerObjectContent::Unknown(_class, _tag, bytes) = &item.content {
-         // Try parsing inner content as OCTET STRING
-        if let Ok((_, inner_obj)) = parse_der_octetstring(bytes) {
-            if let BerObjectContent::OctetString(inner_bytes) = &inner_obj.content {
-                return String::from_utf8(inner_bytes.to_vec()).ok();
+    match &item.content {
+        BerObjectContent::OctetString(bytes) => String::from_utf8(bytes.to_vec()).ok(),
+        BerObjectContent::UTF8String(s) => Some(s.to_string()),
+        
+        BerObjectContent::Unknown(any) => {
+            if let Ok((_, inner_obj)) = parse_der_octetstring(any.data) {
+                return extract_string(&inner_obj);
             }
-        }
-        // Try parsing inner content as UTF8 STRING
-        if let Ok((_, inner_obj)) = parse_der_utf8string(bytes) {
-            if let BerObjectContent::UTF8String(s) = &inner_obj.content {
-                return Some(s.to_string());
+            if let Ok((_, inner_obj)) = parse_der_utf8string(any.data) {
+                return extract_string(&inner_obj);
             }
-        }
+            None
+        },
+        
+        // 🚀 CRITICAL FIX: Match (Class, Tag, Object)
+        BerObjectContent::Tagged(_class, _tag, inner) => {
+            extract_string(&**inner)
+        },
+        _ => None
     }
-
-    // 4. Explicitly Tagged (ContextSpecific)
-    // If we have a nested object available
-    if let BerObjectContent::ContextSpecific(_tag, opt_inner) = &item.content {
-        if let Some(inner) = opt_inner {
-            return extract_string(inner); // Recurse
-        }
-    }
-    
-    None
 }
 
 fn verify_google_root(root: &X509Certificate) -> Result<(), EngineError> {

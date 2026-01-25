@@ -1,116 +1,154 @@
 // invariant_sdk/lib/invariant_sdk.dart
-/*
- * Copyright (c) 2026 Invariant Protocol.
- *
- * This source code is licensed under the Business Source License (BSL 1.1) 
- * found in the LICENSE.md file in the root directory of this source tree.
- */
+library invariant_sdk;
 
-import 'dart:async';
-import 'package:flutter/services.dart';
-import 'src/api_client.dart';
+import 'package:flutter/services.dart'; // Required for MethodChannel
+import 'package:invariant_sdk/src/api_client.dart';
 
-/// The result of a device verification attempt.
+/// The operational mode of the Invariant SDK.
+enum InvariantMode {
+  enforce,
+  shadow,
+}
+
+/// The authoritative decision from the Invariant Policy Engine.
+enum InvariantDecision {
+  allow,
+  allowShadow,
+  deny,
+}
+
+/// The result of a hardware attestation check.
 class InvariantResult {
-  final bool isVerified;
-  final String? identityId;
-  final String riskTier; // "PHYSICAL_TEE", "EMULATOR", "ROOTED", "SHADOW_PASS"
-  final double? riskScore;
+  final InvariantDecision decision;
+  final String tier;
+  final double score;
+  final String? brand;
+  final String? deviceModel;
+  final String? product;
+  final bool bootLocked;
+  final String? reason;
 
-  InvariantResult({
-    required this.isVerified,
-    this.identityId,
-    this.riskTier = "UNKNOWN",
-    this.riskScore,
+  const InvariantResult({
+    required this.decision,
+    required this.tier,
+    required this.score,
+    this.brand,
+    this.deviceModel,
+    this.product,
+    this.bootLocked = false,
+    this.reason,
   });
+
+  bool get isVerified => decision == InvariantDecision.allow;
+
+  factory InvariantResult.fromJson(Map<String, dynamic> json, InvariantMode mode) {
+    final bool isVerified = json['verified'] ?? false;
+    final String tier = json['tier'] ?? 'UNKNOWN';
+    final double score = (json['risk_score'] as num?)?.toDouble() ?? 100.0;
+    
+    final String? brand = json['brand'];
+    final String? deviceModel = json['device_model']; 
+    final String? product = json['product'];
+    final bool bootLocked = json['boot_locked'] ?? false;
+    final String? error = json['error'];
+
+    InvariantDecision decision;
+    if (isVerified) {
+      decision = InvariantDecision.allow;
+    } else {
+      decision = (mode == InvariantMode.shadow) 
+          ? InvariantDecision.allowShadow 
+          : InvariantDecision.deny;
+    }
+
+    return InvariantResult(
+      decision: decision,
+      tier: tier,
+      score: score,
+      brand: brand,
+      deviceModel: deviceModel,
+      product: product,
+      bootLocked: bootLocked,
+      reason: error,
+    );
+  }
+
+  factory InvariantResult.failOpen(String reason) {
+    return InvariantResult(
+      decision: InvariantDecision.allow,
+      tier: "UNVERIFIED_TRANSIENT",
+      score: 0.0, 
+      reason: reason,
+    );
+  }
 }
 
 class Invariant {
-  static const MethodChannel _channel = MethodChannel('com.invariant.protocol/keystore');
-  static late final ApiClient _client;
-  static bool _initialized = false;
+  static ApiClient? _client;
+  static InvariantMode _mode = InvariantMode.shadow;
   
-  // ⚡ SHADOW MODE TOGGLE
-  static bool _isBlocking = true;
+  // ⚡ REAL HARDWARE CHANNEL
+  static const MethodChannel _channel = MethodChannel('com.invariant.protocol/keystore');
 
-  /// Initialize the SDK.
-  /// 
-  /// [isBlocking]: If false, failed checks will still return `isVerified: true` (Shadow Mode).
-  /// This allows you to audit traffic without breaking user flow.
   static void initialize({
-    required String apiKey, 
+    required String apiKey,
+    InvariantMode mode = InvariantMode.shadow,
     String? baseUrl,
-    bool isBlocking = true, 
   }) {
+    _mode = mode;
     _client = ApiClient(apiKey: apiKey, baseUrl: baseUrl);
-    _isBlocking = isBlocking;
-    _initialized = true;
   }
 
-  /// Verifies the device hardware against the Invariant Network.
   static Future<InvariantResult> verifyDevice() async {
-    if (!_initialized) throw Exception("Invariant not initialized. Call Invariant.initialize() first.");
-
     try {
-      // 1. Get Challenge (Fail-Open safe)
-      final nonce = await _client.getChallenge();
-      
-      // ⚡ FAIL-OPEN LOGIC: Network Down?
+      final client = _client;
+      if (client == null) {
+        return const InvariantResult(
+          decision: InvariantDecision.deny, 
+          tier: "SDK_INTERNAL_ERROR", 
+          score: 100.0,
+          reason: "SDK not initialized. Call Invariant.initialize() first.",
+        );
+      }
+
+      // 1. Get Challenge (Nonce)
+      final nonce = await client.getChallenge();
       if (nonce == null) {
+        return InvariantResult.failOpen("Upstream Unavailable: Challenge Failed");
+      }
+
+      // 2. Hardware Signature (Native Call)
+      Map<dynamic, dynamic> hardwareResult;
+      try {
+        // 🚀 CRITICAL: Invoking the Kotlin code here
+        hardwareResult = await _channel.invokeMethod('generateIdentity', {'nonce': nonce});
+      } on PlatformException catch (e) {
+        // Handle specific hardware errors (e.g. Device not secure)
         return InvariantResult(
-          isVerified: true, // Allow user proceed
-          riskTier: "NETWORK_FAIL_OPEN"
+          decision: (_mode == InvariantMode.shadow) ? InvariantDecision.allowShadow : InvariantDecision.deny,
+          tier: "SOFTWARE_ERROR",
+          score: 100.0,
+          reason: "Hardware Failure: ${e.message}",
         );
       }
 
-      // 2. Hardware Attestation (Native Layer)
-      final result = await _channel.invokeMethod('generateIdentity', {'nonce': nonce});
-      
-      final Map<Object?, Object?> data = result;
-      final pkBytes = (data['publicKey'] as List).cast<int>();
-      final chainBytes = (data['attestationChain'] as List).map((e) => (e as List).cast<int>()).toList();
+      // 3. Construct Payload with REAL Hardware Data
+      final payload = {
+        "public_key": hardwareResult['publicKey'],         // List<int> from Kotlin
+        "attestation_chain": hardwareResult['attestationChain'], // List<List<int>> from Kotlin
+        "nonce": client.hexToBytes(nonce),
+      };
 
-      // 3. Verify on Server
-      final verification = await _client.verify(pkBytes, chainBytes, nonce);
-      
-      // ⚡ FAIL-OPEN LOGIC: Server Error?
-      if (verification == null) {
-        return InvariantResult(
-          isVerified: true, // Allow user proceed
-          riskTier: "SERVER_FAIL_OPEN"
-        );
-      }
+      // 4. Verify with Node
+      final resultData = await client.verify(payload);
 
-      // 4. SHADOW MODE LOGIC
-      // If server rejected it, but we are in Shadow Mode, we return TRUE (Verified)
-      // but mark the tier as Shadow so the backend logs it (handled by server-side analytics)
-      if (verification['verified'] == true) {
-        return InvariantResult(
-          isVerified: true,
-          identityId: verification['id'],
-          riskTier: verification['tier'] ?? "PHYSICAL_TEE",
-        );
+      if (resultData != null) {
+        return InvariantResult.fromJson(resultData, _mode);
       } else {
-        // Device is Bad (Emulator/Rooted)
-        if (!_isBlocking) {
-          // SHADOW MODE: Allow it, but tag it.
-          return InvariantResult(
-            isVerified: true, 
-            riskTier: "SHADOW_FLAGGED_${verification['tier']}"
-          );
-        }
-        
-        // BLOCKING MODE: Reject it.
-        return InvariantResult(isVerified: false, riskTier: "REJECTED_BY_POLICY");
+        return InvariantResult.failOpen("Verification Service Error");
       }
-
-    } on PlatformException {
-      // Hardware failure (Emulator often throws here)
-      if (!_isBlocking) return InvariantResult(isVerified: true, riskTier: "SHADOW_HARDWARE_FAIL");
-      return InvariantResult(isVerified: false, riskTier: "HARDWARE_FAILURE");
-    } catch (_) {
-      // Unknown Error -> Fail Open
-      return InvariantResult(isVerified: true, riskTier: "UNKNOWN_FAIL_OPEN");
+    } catch (e) {
+      return InvariantResult.failOpen("Client Error: ${e.toString()}");
     }
   }
 }

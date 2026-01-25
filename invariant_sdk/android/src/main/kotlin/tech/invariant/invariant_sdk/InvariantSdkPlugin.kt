@@ -3,6 +3,7 @@ package tech.invariant.invariant_sdk
 import androidx.annotation.NonNull
 import android.content.Context
 import android.app.KeyguardManager
+import android.os.Build
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -21,6 +22,7 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
     private val KEY_ALIAS = "invariant_shadow_key"
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+        // 🚀 MATCHES DART CHANNEL NAME
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.invariant.protocol/keystore")
         channel.setMethodCallHandler(this)
         context = flutterPluginBinding.applicationContext
@@ -45,7 +47,9 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
                     // 2. Clean up old keys to ensure freshness
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
-                    keyStore.deleteEntry(KEY_ALIAS)
+                    if (keyStore.containsAlias(KEY_ALIAS)) {
+                        keyStore.deleteEntry(KEY_ALIAS)
+                    }
                     
                     // 3. Generate
                     result.success(generateIdentity(nonceHex))
@@ -53,7 +57,6 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
-            // Handle specific Keystore errors
             if (e is InvalidAlgorithmParameterException) {
                 result.error("KEYSTORE_CONFIG_ERROR", "Lock screen not set or hardware not supported: ${e.message}", null)
             } else {
@@ -75,24 +78,27 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
         val challengeBytes = hexStringToByteArray(nonceHex)
         val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         
-        val parameterSpec = KeyGenParameterSpec.Builder(
+        // 🚀 FIX START: Use a builder variable so we can conditionally set flags
+        val builder = KeyGenParameterSpec.Builder(
             KEY_ALIAS,
             KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
         )
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
             .setAttestationChallenge(challengeBytes)
-            
-            // 👇 THIS IS THE FIX 👇
-            // This tells the TEE: "Only allow this key to work if the user is authenticated"
-            // The Rust server checks for this flag in the ASN.1 data.
             .setUserAuthenticationRequired(true)
-            .setUserAuthenticationValidityDurationSeconds(60) // Valid for 60s after unlock/biometric
-            
-            .build()
+            .setUserAuthenticationValidityDurationSeconds(60)
 
-        kpg.initialize(parameterSpec)
+        // 🟢 ENABLE DEVICE PROPERTIES (BRAND/MODEL) IN ATTESTATION
+        // This makes the TEE include the device identifiers in the certificate extension.
+        // Only available on Android 12 (API 31) and higher.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setDevicePropertiesAttestationIncluded(true)
+        }
+        
+        kpg.initialize(builder.build())
         kpg.generateKeyPair()
+        // 🚀 FIX END
 
         val keyStore = KeyStore.getInstance("AndroidKeyStore")
         keyStore.load(null)
@@ -100,6 +106,8 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
         val certs = keyStore.getCertificateChain(KEY_ALIAS)
 
         // Convert certificates and public key to raw bytes for Dart
+        // Rust expects Vec<u8> (List<int>) for public key
+        // Rust expects Vec<Vec<u8>> (List<List<int>>) for chain
         val chainList = certs.map { cert -> cert.encoded.map { it.toInt() and 0xFF }.toList() }
         val publicKeyBytes = entry.certificate.publicKey.encoded.map { it.toInt() and 0xFF }.toList()
 

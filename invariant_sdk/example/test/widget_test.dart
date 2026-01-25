@@ -1,27 +1,18 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// invariant_sdk/example/test/widget_test.dart
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:invariant_sdk_example/main.dart';
+import 'package:invariant_sdk_example/main.dart'; // Ensure this matches your package name in pubspec.yaml
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
+  testWidgets('Verify Operational Dashboard loads', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const ShadowTestApp());
+    // 🚀 FIXED: Updated class name from ShadowTestApp to OperationalDashboardApp
+    await tester.pumpWidget(const OperationalDashboardApp());
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget is Text &&
-                           widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+    // Verify that the dashboard header exists
+    expect(find.text('INVARIANT // OPS DASHBOARD'), findsOneWidget);
+    
+    // Verify the execute button exists
+    expect(find.text('EXECUTE ATTESTATION'), findsOneWidget);
   });
 }
