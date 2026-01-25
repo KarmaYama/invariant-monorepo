@@ -10,9 +10,6 @@ use x509_parser::prelude::*;
 use crate::error::EngineError;
 use base64::{Engine as _, engine::general_purpose};
 use der_parser::der::*;
-// We need the specific parser for the fallback strategy
-use der_parser::der::parse_der_octetstring; 
-// We need the Content Enum to match types directly
 use der_parser::ber::BerObjectContent; 
 use p256::pkcs8::DecodePublicKey;
 use p256::ecdsa::VerifyingKey;
@@ -30,8 +27,8 @@ const KM_TAG_ROOT_OF_TRUST: u32 = 704;
 const KM_TAG_ATTESTATION_ID_BRAND: u32 = 710;
 const KM_TAG_ATTESTATION_ID_DEVICE: u32 = 711;
 const KM_TAG_ATTESTATION_ID_PRODUCT: u32 = 712;
-const KM_TAG_ATTESTATION_ID_MANUFACTURER: u32 = 714;
-const KM_TAG_ATTESTATION_ID_MODEL: u32 = 715;
+const KM_TAG_ATTESTATION_ID_MANUFACTURER: u32 = 716; // Fixed: 716 is Manufacturer
+const KM_TAG_ATTESTATION_ID_MODEL: u32 = 717;        // Fixed: 717 is Model
 
 // --- Google Hardware Root (Pinned) ---
 const GOOGLE_HARDWARE_ROOT_PEM: &str = r#"
@@ -77,7 +74,6 @@ pub struct AttestationMetadata {
     pub is_boot_locked: bool,
 }
 
-/// Validates the chain, enforces binding, and verifies the Nonce.
 pub fn validate_attestation_chain(
     chain: &[Vec<u8>], 
     expected_public_key: &[u8],
@@ -131,7 +127,6 @@ pub fn validate_attestation_chain(
     Ok(metadata)
 }
 
-/// Parses ASN.1 to extract Security Logic AND Metadata
 pub fn verify_extension_and_extract(
     extension_value: &[u8],
     expected_challenge: Option<&[u8]>
@@ -169,7 +164,6 @@ pub fn verify_extension_and_extract(
     }
 
     // C. Verify TEE Enforced Authorization List (Index 7)
-    // This requires iterating the SEQUENCE because tags are context-specific.
     let tee_enforced_obj = &items[7];
     let tee_enforced_list = tee_enforced_obj.as_sequence()
         .map_err(|_| EngineError::InvalidAttestation("teeEnforced is not a sequence".into()))?;
@@ -187,21 +181,17 @@ pub fn verify_extension_and_extract(
         let tag = item.header.tag().0;
 
         // Security Checks
-        // RootOfTrust is Tag 704. It contains a SEQUENCE.
         if tag == KM_TAG_ROOT_OF_TRUST {
             has_root_of_trust = true;
             if let Ok(content_bytes) = item.as_slice() {
-                // We must parse the content of the tagged item as a SEQUENCE
+                // Parse inner SEQUENCE
                 if let Ok((_, rot_seq_obj)) = parse_der_sequence(content_bytes) {
                     if let Ok(seq) = rot_seq_obj.as_sequence() {
-                        // RootOfTrust SEQUENCE:
-                        // 0: verifiedBootKey
-                        // 1: deviceLocked (Boolean)
-                        // 2: verifiedBootState (Enum)
+                         // 0: verifiedBootKey, 1: deviceLocked, 2: verifiedBootState
                         if seq.len() >= 3 {
                             if let Ok(locked) = seq[1].as_bool() { is_boot_locked = locked; }
                             if let Ok(state) = seq[2].as_u32() { 
-                                // 0 = Verified
+                                // 0 = Verified, 1 = SelfSigned
                                 if state == 0 { is_verified_boot = true; } 
                             }
                         }
@@ -213,25 +203,17 @@ pub fn verify_extension_and_extract(
         if tag == KM_TAG_NO_AUTH_REQUIRED { no_auth_required = true; }
 
         // Metadata Extraction
-        if tag == KM_TAG_ATTESTATION_ID_BRAND {
-            brand = extract_string(item);
-        }
-        if tag == KM_TAG_ATTESTATION_ID_DEVICE {
-            device = extract_string(item);
-        }
-        if tag == KM_TAG_ATTESTATION_ID_PRODUCT {
-            product = extract_string(item);
-        }
-        // Fallback for some OEMs
-        if tag == KM_TAG_ATTESTATION_ID_MANUFACTURER && brand.is_none() {
-            brand = extract_string(item);
-        }
-        if tag == KM_TAG_ATTESTATION_ID_MODEL && device.is_none() {
-            device = extract_string(item);
-        }
+        // 🚀 FIXED: Robust extraction logic that handles implicit tagging
+        if tag == KM_TAG_ATTESTATION_ID_BRAND { brand = extract_string(item); }
+        if tag == KM_TAG_ATTESTATION_ID_DEVICE { device = extract_string(item); }
+        if tag == KM_TAG_ATTESTATION_ID_PRODUCT { product = extract_string(item); }
+        
+        // Fallbacks for Samsung/OEM variations
+        if tag == KM_TAG_ATTESTATION_ID_MANUFACTURER && brand.is_none() { brand = extract_string(item); }
+        if tag == KM_TAG_ATTESTATION_ID_MODEL && device.is_none() { device = extract_string(item); }
     }
 
-    // Security Enforcements (Hostile Audit Fixes)
+    // Security Enforcements
     if !has_root_of_trust { return Err(EngineError::InvalidAttestation("Missing Root of Trust".into())); }
     if !is_boot_locked { return Err(EngineError::InvalidAttestation("Bootloader Unlocked".into())); }
     if !is_verified_boot { return Err(EngineError::InvalidAttestation("OS Integrity Failed".into())); }
@@ -249,30 +231,45 @@ pub fn verify_extension_and_extract(
     Ok(metadata)
 }
 
-// Helper to convert ASN.1 OCTET_STRING -> Rust String
-// FIXED: Handles implicit tagging correctly to prevent ASN.1 leakage
+// 🚀 ROBUST STRING EXTRACTOR
+// Recursively peels ContextSpecific tags to find the inner OCTET STRING
 fn extract_string(item: &DerObject) -> Option<String> {
-    // First try: item IS an OCTET STRING (explicit match on content enum)
-    // We match directly on the Content enum to avoid version incompatibilities with helper methods.
+    // 1. Direct match (e.g. it's already an OctetString)
     if let BerObjectContent::OctetString(bytes) = &item.content {
-        if let Ok(s) = str::from_utf8(bytes) {
-            return Some(s.to_string());
-        }
+        return String::from_utf8(bytes.to_vec()).ok();
+    }
+    
+    // 2. Direct match (UTF8String - rare but possible in some HALs)
+    if let BerObjectContent::UTF8String(s) = &item.content {
+        return Some(s.to_string());
     }
 
-    // Fallback: item wraps an OCTET STRING (implicit tagging)
-    // This handles the "Failure 1" scenario where tag is ContextSpecific but inner data is an OctetString
-    if let Ok(raw) = item.as_slice() {
-        if let Ok((_, inner)) = parse_der_octetstring(raw) {
-            // "inner" is the parsed DerObject. We need its bytes.
-            if let Ok(content) = inner.as_slice() {
-                if let Ok(s) = str::from_utf8(content) {
-                    return Some(s.to_string());
-                }
+    // 3. Implicitly Tagged (ContextSpecific)
+    // The parser wrapper often hides the inner content as raw bytes.
+    // We try to re-parse those raw bytes as an OctetString.
+    if let BerObjectContent::Unknown(_class, _tag, bytes) = &item.content {
+         // Try parsing inner content as OCTET STRING
+        if let Ok((_, inner_obj)) = parse_der_octetstring(bytes) {
+            if let BerObjectContent::OctetString(inner_bytes) = &inner_obj.content {
+                return String::from_utf8(inner_bytes.to_vec()).ok();
+            }
+        }
+        // Try parsing inner content as UTF8 STRING
+        if let Ok((_, inner_obj)) = parse_der_utf8string(bytes) {
+            if let BerObjectContent::UTF8String(s) = &inner_obj.content {
+                return Some(s.to_string());
             }
         }
     }
 
+    // 4. Explicitly Tagged (ContextSpecific)
+    // If we have a nested object available
+    if let BerObjectContent::ContextSpecific(_tag, opt_inner) = &item.content {
+        if let Some(inner) = opt_inner {
+            return extract_string(inner); // Recurse
+        }
+    }
+    
     None
 }
 

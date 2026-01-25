@@ -14,7 +14,7 @@ use crate::error_response::AppError;
 use tracing::{error, info, warn, instrument};
 use rand::{Rng, thread_rng};
 use redis::AsyncCommands; 
-use sha2::{Sha256, Digest}; // Required for Lock ID hashing
+use sha2::{Sha256, Digest}; 
 
 const NONCE_TTL_SECONDS: u64 = 300; 
 const CONFIG_KEY_PAUSED: &str = "invariant:config:genesis_paused";
@@ -107,21 +107,45 @@ pub async fn get_challenge_handler(
         (status = 503, description = "Genesis Paused")
     )
 )]
-#[instrument(skip(state, payload))]
+// 🚀 STRUCTURED LOGGING FIX
+// We skip the full 'payload' to prevent JSON parser crashes on large cert chains.
+// We explicitly define fields to capture essential metadata instead.
+#[instrument(
+    skip(state, payload), 
+    fields(
+        nonce_prefix = tracing::field::Empty, 
+        chain_len = tracing::field::Empty, 
+        pk_fingerprint = tracing::field::Empty
+    )
+)]
 pub async fn genesis_handler(
     Extension(state): Extension<SharedState>,
     Json(payload): Json<GenesisRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    
+    // 1. Populate Structured Logs
+    let span = tracing::Span::current();
+    
+    // Log prefix of nonce to correlate with Redis errors (safe to log prefix)
+    let nonce_prefix = hex::encode(payload.nonce.get(0..4).unwrap_or(&[]));
+    
+    // Log SHA256 fingerprint of the user's public key (safe ID)
+    let pk_hash = hex::encode(Sha256::digest(&payload.public_key));
+    
+    span.record("nonce_prefix", &nonce_prefix);
+    span.record("chain_len", &payload.attestation_chain.len());
+    span.record("pk_fingerprint", &pk_hash);
+
     let mut conn = state.redis.get_multiplexed_async_connection().await
         .map_err(|e| anyhow::anyhow!("Redis connection failed: {}", e))?;
 
-    // 1. Feature Flag
+    // 2. Feature Flag
     let is_paused: bool = conn.exists(CONFIG_KEY_PAUSED).await.unwrap_or(false);
     if is_paused {
         return Err(anyhow::anyhow!("Genesis paused").into());
     }
 
-    // 2. Nonce Validation (Peek)
+    // 3. Nonce Validation (Peek)
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
     let nonce_exists: bool = conn.exists(&redis_key).await.unwrap_or(false);
@@ -130,10 +154,9 @@ pub async fn genesis_handler(
         return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid or Expired Challenge." }))));
     }
 
-    // 3. 🔒 DISTRIBUTED LOCK (Anti-Race Condition)
-    // Hash the public key to prevent "Key stuffing" DoS attacks
-    let pk_hash = Sha256::digest(&payload.public_key);
-    let lock_key = format!("lock:genesis:{}", hex::encode(pk_hash));
+    // 4. 🔒 DISTRIBUTED LOCK (Anti-Race Condition)
+    // We use the computed pk_hash from above
+    let lock_key = format!("lock:genesis:{}", pk_hash);
 
     // Try to acquire lock for 10 seconds. Returns true if acquired.
     let lock_acquired: bool = redis::cmd("SET")
@@ -147,17 +170,17 @@ pub async fn genesis_handler(
         .unwrap_or(false);
 
     if !lock_acquired {
-        warn!("⚠️ Concurrent Genesis Blocked for key hash: {}", hex::encode(pk_hash));
+        warn!("⚠️ Concurrent Genesis Blocked");
         return Ok((StatusCode::CONFLICT, Json(serde_json::json!({ 
             "error": "Request already in progress. Please wait." 
         }))));
     }
 
-    // 4. Consume Nonce (Atomic Delete)
+    // 5. Consume Nonce (Atomic Delete)
     // We own the lock, so we burn the nonce now.
     let _: () = conn.del(&redis_key).await.unwrap_or(());
 
-    // 5. Engine Processing
+    // 6. Engine Processing
     match state.engine.process_genesis(payload).await {
         Ok(identity) => {
             info!("✅ Genesis Success! Minted: {}", identity.id);
@@ -184,15 +207,33 @@ pub async fn genesis_handler(
         (status = 200, description = "Verification Result", body = inline(serde_json::Value))
     )
 )]
-#[instrument(skip(state, payload))]
+// 🚀 APPLY SAME LOGGING FIX HERE
+#[instrument(
+    skip(state, payload), 
+    fields(
+        nonce_prefix = tracing::field::Empty, 
+        chain_len = tracing::field::Empty, 
+        pk_fingerprint = tracing::field::Empty
+    )
+)]
 pub async fn verify_stateless_handler(
     Extension(state): Extension<SharedState>,
     Json(payload): Json<GenesisRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    
+    // 1. Populate Logs
+    let span = tracing::Span::current();
+    let nonce_prefix = hex::encode(payload.nonce.get(0..4).unwrap_or(&[]));
+    let pk_hash = hex::encode(Sha256::digest(&payload.public_key));
+    
+    span.record("nonce_prefix", &nonce_prefix);
+    span.record("chain_len", &payload.attestation_chain.len());
+    span.record("pk_fingerprint", &pk_hash);
+
     let mut conn = state.redis.get_multiplexed_async_connection().await
         .map_err(|e| anyhow::anyhow!("Infrastructure Error: {}", e))?;
 
-    // 1. Nonce Check (Consume immediately for stateless)
+    // 2. Nonce Check (Consume immediately for stateless)
     let nonce_hex = hex::encode(&payload.nonce);
     let redis_key = format!("nonce:{}", nonce_hex);
 
@@ -204,7 +245,7 @@ pub async fn verify_stateless_handler(
         }))));
     }
 
-    // 2. Pure Crypto Verification
+    // 3. Pure Crypto Verification
     match invariant_engine::validate_attestation_chain(
         &payload.attestation_chain,
         &payload.public_key,
@@ -213,7 +254,7 @@ pub async fn verify_stateless_handler(
         Ok(metadata) => {
             info!("🔍 Stateless Verification: {} - {}", metadata.trust_tier, metadata.product.as_deref().unwrap_or("Unknown"));
             
-            // ✅ Return Full Hardware Metadata
+            // ✅ Return Full Hardware Metadata (Raw fields allowed to be null)
             Ok((StatusCode::OK, Json(serde_json::json!({
                 "verified": true,
                 "tier": metadata.trust_tier,
