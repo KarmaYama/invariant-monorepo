@@ -42,7 +42,7 @@ export default function About() {
               <p className="text-[#00FFC2] text-sm mt-1">Product & Frontend</p>
             </div>
             <p className="text-white/60 leading-relaxed mb-6 font-light">
-              Expert in scalable client architecture. Cristobal leads the development of the mobile client and the integration SDKs for partners.
+              Expert in scalable client architecture. Cristobal leads the development of the frontend website and the integration SDKs for partners.
             </p>
             <div className="flex gap-4">
               <SocialLink icon={<Github size={18} />} href="https://github.com/ToTozudo" />
