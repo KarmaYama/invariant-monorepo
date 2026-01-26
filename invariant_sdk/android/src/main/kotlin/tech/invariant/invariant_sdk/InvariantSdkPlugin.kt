@@ -3,7 +3,7 @@ package tech.invariant.invariant_sdk
 import androidx.annotation.NonNull
 import android.content.Context
 import android.app.KeyguardManager
-import android.os.Build // Required for Build.MODEL
+import android.os.Build
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -33,6 +33,7 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
         try {
             when (call.method) {
                 "generateIdentity" -> {
+                    // 1. Local Security Check
                     if (!isDeviceSecure()) {
                         result.error("DEVICE_INSECURE", "Lock screen required.", null)
                         return
@@ -40,14 +41,14 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
 
                     val nonceHex = call.argument<String>("nonce")!!
                     
-                    // Clean up old keys
+                    // 2. Cleanup
                     val keyStore = KeyStore.getInstance("AndroidKeyStore")
                     keyStore.load(null)
                     if (keyStore.containsAlias(KEY_ALIAS)) {
                         keyStore.deleteEntry(KEY_ALIAS)
                     }
                     
-                    // Generate with Fallback
+                    // 3. Generate with Fallback
                     val keyMap = generateWithFallback(nonceHex)
                     result.success(keyMap)
                 }
@@ -74,8 +75,7 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
 
     private fun generateWithFallback(nonceHex: String): Map<String, Any> {
         return try {
-            // Attempt 1: Try Rich Attestation (Hardware verifies Brand/Model)
-            // This crashes on Samsung A16
+            // Attempt 1: Rich Attestation (Hardware verifies Brand/Model)
             generateKeyPair(nonceHex, includeDeviceProps = true)
         } catch (e: Exception) {
             Log.w(TAG, "⚠️ Rich Attestation Failed. Falling back to Standard TEE. Error: ${e.message}")
@@ -98,7 +98,6 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
             .setUserAuthenticationRequired(true)
             .setUserAuthenticationValidityDurationSeconds(60)
 
-        // Only add this flag if requested AND supported
         if (includeDeviceProps && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setDevicePropertiesAttestationIncluded(true)
         }
@@ -114,8 +113,6 @@ class InvariantSdkPlugin: FlutterPlugin, MethodCallHandler {
         val chainList = certs.map { cert -> cert.encoded.map { it.toInt() and 0xFF }.toList() }
         val publicKeyBytes = entry.certificate.publicKey.encoded.map { it.toInt() and 0xFF }.toList()
 
-        // 🚀 NEW: Always return the Software Metadata as a backup
-        // This ensures the UI is never empty, even if the TEE is silent.
         return mapOf(
             "publicKey" to publicKeyBytes, 
             "attestationChain" to chainList,
