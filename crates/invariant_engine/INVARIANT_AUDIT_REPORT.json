@@ -1,14 +1,9 @@
 {
   "audit_meta": {
     "auditor": "Invariant Adversarial Suite (Automated)",
-    "duration_seconds": 143,
-    "generated_at": "2026-02-01T13:12:11.835229700+00:00",
-    "id": "374c2f03-564c-492c-8fa5-9e3b291cc0b8"
-  },
-  "config": {
-    "concurrency": "1000 ",
-    "iterations": "5000 ",
-    "seed": "0xDEADBEEF"
+    "duration_seconds": 145,
+    "generated_at": "2026-02-01T15:10:54.429173800+00:00",
+    "id": "0bdd9bbb-213f-4164-ab8d-b7c3a91c96a8"
   },
   "failures": [],
   "logs": [
@@ -17,40 +12,75 @@
       "message": "No panics observed under structural mutation.",
       "status": "PASS",
       "test": "Deep Fuzzing",
-      "timestamp": "2026-02-01T13:09:48.061977700+00:00"
+      "timestamp": "2026-02-01T15:08:28.730060200+00:00"
     },
     {
       "category": "Concurrency",
-      "message": "DB state perfectly consistent.",
+      "message": "DB state consistent.",
       "status": "PASS",
       "test": "Atomic Increment",
-      "timestamp": "2026-02-01T13:09:50.861270800+00:00"
+      "timestamp": "2026-02-01T15:08:31.815129300+00:00"
     },
     {
       "category": "Concurrency",
       "message": "Blocked 499 concurrent replays.",
       "status": "PASS",
       "test": "Replay Defense",
-      "timestamp": "2026-02-01T13:09:50.861286700+00:00"
+      "timestamp": "2026-02-01T15:08:31.815146400+00:00"
     },
     {
       "category": "Crypto",
       "message": "Validated integrity against corruption/forgery.",
       "status": "PASS",
       "test": "Signature Fuzzing",
-      "timestamp": "2026-02-01T13:12:11.825095300+00:00"
+      "timestamp": "2026-02-01T15:10:54.370380800+00:00"
     },
     {
       "category": "Logic",
       "message": "Boundary conditions enforced correctly.",
       "status": "PASS",
       "test": "Trust Decay",
-      "timestamp": "2026-02-01T13:12:11.833148800+00:00"
+      "timestamp": "2026-02-01T15:10:54.378174500+00:00"
+    },
+    {
+      "category": "Regression",
+      "message": "Blocked invalid nonce.",
+      "status": "PASS",
+      "test": "Nonce Mismatch",
+      "timestamp": "2026-02-01T15:10:54.380129700+00:00"
+    },
+    {
+      "category": "Regression",
+      "message": "Standard Pixel attestation valid.",
+      "status": "PASS",
+      "test": "Attestation Success",
+      "timestamp": "2026-02-01T15:10:54.381397500+00:00"
+    },
+    {
+      "category": "Regression",
+      "message": "Blocked software-backed key.",
+      "status": "PASS",
+      "test": "Software Rejection",
+      "timestamp": "2026-02-01T15:10:54.382667200+00:00"
+    },
+    {
+      "category": "Regression",
+      "message": "Blocked invalid signature correctly.",
+      "status": "PASS",
+      "test": "Invalid Sig Check",
+      "timestamp": "2026-02-01T15:10:54.419499500+00:00"
+    },
+    {
+      "category": "Regression",
+      "message": "Extracted deep-nested ASN.1 tags correctly.",
+      "status": "PASS",
+      "test": "Metadata Parsing",
+      "timestamp": "2026-02-01T15:10:54.424420200+00:00"
     }
   ],
   "metrics": {
     "artifacts_generated": 0,
-    "events_tracked": 5,
+    "events_tracked": 10,
     "panics_detected": 0,
     "risk_score": 0
   }
